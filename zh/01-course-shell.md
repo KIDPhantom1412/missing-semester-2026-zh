@@ -148,13 +148,13 @@ missing:~$  -type -name"*.zip" -mtime
 在下载目录中查找超过 30 天未修改的 ZIP 文件。
 
 ```
-missing:~$  -type -size -exec ls -lh{}\\;
+missing:~$  -type -size -exec ls -lh{}\;
 ```
 
 在你的主目录中查找大于 100M 的文件并列出它们。注意 `-exec` 接受一个以单独的 `;` 结尾的*命令*（这个 `;` 需要转义，和空格的情况很像），其中的 `{}` 会被 `find` 替换为每个匹配到的文件路径。
 
 ```
-missing:~$  . -name"*.py" -exec grep -l "TODO"{}\\;
+missing:~$  . -name"*.py" -exec grep -l "TODO"{}\;
 ```
 
 查找其中含有 TODO 事项的所有 `.py` 文件。
@@ -174,7 +174,7 @@ missing:~$  awk'{print $2}'
 把这些工具组合起来，我们就能玩出这样的花样：
 
 ```
-missing:~$  'journalctl -u sshd -b-1 | grep "Disconnected from"' \\ | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\\1/' \\ | sort | uniq -c \\ | sort -nk1,1 | tail -n10 \\  | awk '{print $}' | paste -sd, postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root 
+missing:~$  'journalctl -u sshd -b-1 | grep "Disconnected from"' \ | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\1/' \ | sort | uniq -c \ | sort -nk1,1 | tail -n10 \  | awk '{print $}' | paste -sd, postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root 
 ```
 
 这条命令从一台远程服务器抓取 SSH 日志（关于 `ssh` 我们会在下一讲详细讨论），搜索断开连接的消息，从每条这样的消息中提取用户名，然后以逗号分隔打印出出现次数最多的前 10 个用户名。全都在一条命令里完成！把每一步拆解开留作练习。
@@ -226,7 +226,7 @@ for in$(seq ); do
 1. 本课程要求你使用 Unix 风格的 Shell，比如 Bash 或 ZSH。如果你用的是 Linux 或 macOS，不需要做任何特别的准备。如果你用的是 Windows，你需要确保自己运行的不是 cmd.exe 或 PowerShell；你可以使用 [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/) 或 Linux 虚拟机来使用 Unix 风格的命令行工具。要确认你运行的是合适的 Shell，可以试试命令 `echo $SHELL`。如果它输出类似 `/bin/bash` 或 `/usr/bin/zsh` 的内容，说明你运行的是正确的程序。
 2. `ls` 的 `-l` 旗标是做什么的？运行 `ls -l /` 并观察输出。每一行的前 10 个字符是什么意思？（提示：`man ls`）
 3. 在命令 `find ~/Downloads -type f -name "*.zip" -mtime +30` 中，`*.zip` 是一个“glob”（通配模式）。什么是 glob？创建一个测试目录和若干文件，试试 `ls *.txt`、`ls file?.txt`、`ls {a,b,c}.txt` 这样的模式。参见 Bash 手册中的[模式匹配](https://www.gnu.org/software/bash/manual/html_node/Pattern-Matching.html)（Pattern Matching）。
-4. `'单引号'`、`"双引号"` 和 `$'ANSI 引号'` 之间有什么区别？写一条命令，echo 一个包含字面 `$`、一个 `!` 和一个换行符的字符串。参见[引用](https://www.gnu.org/software/bash/manual/html_node/Quoting.html)（Quoting）。
+4. `'single quotes'`、`"double quotes"` 和 `$'ANSI quotes'` 之间有什么区别？写一条命令，echo 一个包含字面 `$`、一个 `!` 和一个换行符的字符串。参见[引用](https://www.gnu.org/software/bash/manual/html_node/Quoting.html)（Quoting）。
 5. Shell 有三个标准流（standard streams）：stdin（0）、stdout（1）和 stderr（2）。运行 `ls /nonexistent /tmp`，把 stdout 重定向到一个文件、stderr 重定向到另一个文件。如何把两者重定向到同一个文件？参见[重定向](https://www.gnu.org/software/bash/manual/html_node/Redirections.html)（Redirections）。
 6. `$?` 保存上一条命令的退出状态（exit status，0 = 成功）。`&&` 只有在前一条命令成功时才运行下一条命令；`||` 只有在前一条命令失败时才运行它。写一个单行命令，仅当 `/tmp/mydir` 尚不存在时才创建它。参见[退出状态](https://www.gnu.org/software/bash/manual/html_node/Exit-Status.html)（Exit Status）。
 7. 为什么 `cd` 必须内置于 Shell 本身，而不能是一个独立的程序？（提示：想想子进程能和不能影响其父进程的哪些方面。）

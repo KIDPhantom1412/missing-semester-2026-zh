@@ -12,7 +12,7 @@
 
 尽管还有其他 VCS，**Git** 是事实上的（de facto）版本控制标准。这幅 [XKCD 漫画](https://xkcd.com/1597/)刻画了 Git 的名声：
 
-由于 Git 的接口是一种存在泄漏的抽象（leaky abstraction），自顶向下地学习 Git（从它的接口/命令行界面开始）可能会带来很多困惑。人们可以 memorize 少数几条命令并把它们当作魔法咒语，然后每当出问题时就按照上面漫画中的方法来处理。
+由于 Git 的接口是一种存在泄漏的抽象（leaky abstraction），自顶向下地学习 Git（从它的接口/命令行界面开始）可能会带来很多困惑。人们可以死记硬背少数几条命令并把它们当作魔法咒语，然后每当出问题时就按照上面漫画中的方法来处理。
 
 虽然 Git 的接口确实丑陋，但其底层的设计和理念却是优美的。丑陋的接口只能靠*死记硬背*，而优美的设计是可以被*理解*的。正因如此，我们将自底向上地讲解 Git，先从它的数据模型开始，之后再介绍命令行界面。一旦理解了数据模型，就能更好地理解各个命令是如何操纵底层数据模型的。
 
@@ -25,7 +25,7 @@ Git 的巧妙之处在于它精心设计的数据模型，正是这个模型支�
 Git 将某个顶层目录下的一组文件和文件夹的历史建模为一系列快照。在 Git 的术语中，一个文件被称为“blob”，它就是一堆字节。一个目录被称为“tree”，它将名字映射到 blob 或 tree（因此目录可以包含其他目录）。快照就是被跟踪的顶层 tree。例如，我们可能有如下的一棵树：
 
 ```
- (tree) | +- foo (tree) | | | + bar.txt (blob, contents = \"hello world\") | +- baz.txt (blob, contents = \"git is wonderful\") 
+ (tree) | +- foo (tree) | | | + bar.txt (blob, contents = "hello world") | +- baz.txt (blob, contents = "git is wonderful") 
 ```
 
 顶层 tree 包含两个元素：一个 tree “foo”（它本身包含一个元素，即 blob “bar.txt”），以及一个 blob “baz.txt”。
@@ -39,13 +39,13 @@ Git 将某个顶层目录下的一组文件和文件夹的历史建模为一系�
 Git 把这些快照称为“提交”（commit）。把提交历史可视化出来大概长这样：
 
 ```
-o <-- o <-- o <-- o ^ \\ --- o <-- o 
+o <-- o <-- o <-- o ^ \ --- o <-- o 
 ```
 
 在上面的 ASCII 图中，每个 `o` 对应一个单独的提交（快照）。箭头指向每个提交的父提交（这是一种“在……之前”的关系，而不是“在……之后”）。在第三个提交之后，历史分叉成两条独立的分支。这可能对应于，比如两个相互独立、并行开发的特性。将来，这些分支可以被合并，创建出一个同时包含这两个特性的新快照，产生如下所示的新历史，其中新创建的合并提交以粗体显示：
 
 ```
- o <-- o <-- o <-- o <---- o ^ / \\ v --- o <-- o  
+ o <-- o <-- o <-- o <---- o ^ / \ v --- o <-- o  
 ```
 
 Git 中的提交是不可变的。但这并不意味着错误无法修正；只不过对提交历史的“编辑”实际上是创建了全新的提交，并将引用（reference，见下文）更新为指向这些新提交。
@@ -182,7 +182,7 @@ Git 通过一种叫做“暂存区”（staging area）的机制来适应这些�
 * **GUI**：Git 有很多 [GUI 客户端](https://git-scm.com/downloads/guis)。我们个人并不使用它们，而是使用命令行界面。
 * **Shell 集成**：把 Git 状态作为 shell 提示符的一部分非常方便（[zsh](https://github.com/olivierverdier/zsh-git-prompt)、[bash](https://github.com/magicmonty/bash-git-prompt)）。这通常包含在 [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh) 之类的框架中。
 * **编辑器集成**：与上一条类似，是带有很多功能的便捷集成。[fugitive.vim](https://github.com/tpope/vim-fugitive) 是 Vim 的标准选择。
-* **工作流**：我们教了你数据模型和一些基本命令；但我们没有告诉你在大型项目中工作时应遵循哪些实践（而且有[很多](https://nvie.com/posts/a-successful-git-branching-model/)[不同](https://www.endoflineblog.com/gitflow-considered-harmful)[的](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)[方法](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)）。
+* **工作流**：我们教了你数据模型和一些基本命令；但我们没有告诉你在大型项目中工作时应遵循哪些实践（而且有[许多](https://nvie.com/posts/a-successful-git-branching-model/)[各不相同](https://www.endoflineblog.com/gitflow-considered-harmful)的[方法](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)）。
 * **GitHub**：Git 不是 GitHub。GitHub 有一种向其他项目贡献代码的特定方式，叫做[拉取请求](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)（pull request）。
 * **其他 Git 服务商**：GitHub 并不特殊：有很多 Git 仓库托管服务，比如 [GitLab](https://about.gitlab.com/) 和 [BitBucket](https://bitbucket.org/)。
 
