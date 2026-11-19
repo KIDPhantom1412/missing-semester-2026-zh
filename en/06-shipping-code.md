@@ -21,14 +21,20 @@ We’ll explain these concepts through examples from the Python ecosystem, as co
 
 In modern software development, layers of abstraction are ubiquitous. Programs naturally offload logic to other libraries or services. However, this introduces a *dependency* relationship between your program and the libraries it requires to function. For instance, in Python, to fetch the content of a website we often do:
 
-```
-import requests response = requests. get("https://missing.csail.mit.edu")
+```python
+import requests
+
+response = requests.get("https://missing.csail.mit.edu")
 ```
 
 Yet the `requests` library does not come bundled with the Python runtime, so if we try to run this code without having `requests` installed, Python will raise an error:
 
-```
-$  Traceback (most recent call last):  File "fetch.py", line 1, in   import requests ModuleNotFoundError: No module named 'requests' 
+```console
+$ python fetch.py
+Traceback (most recent call last):
+  File "fetch.py", line 1, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
 ```
 
 To make this library available we need to first run `pip install requests` to install it. `pip` is the command line tool that the Python programming language provides for installing packages. Executing `pip install requests` produces the following sequence of actions:
@@ -38,14 +44,30 @@ To make this library available we need to first run `pip install requests` to in
 3. Resolve dependencies — the `requests` library itself depends on other packages, so the installer must find compatible versions of all transitive dependencies and install them beforehand
 4. Download the artifacts, then unpack and copy the files into the right places in our filesystem
 
-```
-$  install Collecting requests Downloading requests-2.32.3-py3-none-any.whl (64 kB) Collecting charset-normalizer<4,> = Downloading charset_normalizer-3.4.0-cp311-cp311-manylinux_x86_64.whl (142 kB) Collecting idna<4,> = Downloading idna-3.10-py3-none-any.whl (70 kB) Collecting urllib3<3,> = Downloading urllib3-2.2.3-py3-none-any.whl (126 kB) Collecting certifi> = Downloading certifi-2024.8.30-py3-none-any.whl (167 kB) Installing collected packages: urllib3, idna, charset-normalizer, certifi, requests Successfully installed certifi-2024.8.30 charset-normalizer-3.4.0 idna-3.10 requests-2.32.3 urllib3-2.2.3 
+```console
+$ pip install requests
+Collecting requests
+  Downloading requests-2.32.3-py3-none-any.whl (64 kB)
+Collecting charset-normalizer<4,>=2
+  Downloading charset_normalizer-3.4.0-cp311-cp311-manylinux_x86_64.whl (142 kB)
+Collecting idna<4,>=2.5
+  Downloading idna-3.10-py3-none-any.whl (70 kB)
+Collecting urllib3<3,>=1.21.1
+  Downloading urllib3-2.2.3-py3-none-any.whl (126 kB)
+Collecting certifi>=2017.4.17
+  Downloading certifi-2024.8.30-py3-none-any.whl (167 kB)
+Installing collected packages: urllib3, idna, charset-normalizer, certifi, requests
+Successfully installed certifi-2024.8.30 charset-normalizer-3.4.0 idna-3.10 requests-2.32.3 urllib3-2.2.3
 ```
 
 Here we can see that `requests` has its own dependencies such as `certifi` or `charset-normalizer` and that they have to be installed before `requests` can be installed. Once installed, the Python runtime can find this library when importing it.
 
-```
-$  -c'import requests; print(requests.__path__)'['/usr/local/lib/python3.11/dist-packages/requests'] $  grep requests 2.32.3 
+```console
+$ python -c 'import requests; print(requests.__path__)'
+['/usr/local/lib/python3.11/dist-packages/requests']
+
+$ pip list | grep requests
+requests        2.32.3
 ```
 
 Programming languages have different tools, conventions and practices for installing and publishing libraries. In some languages like Rust, the toolchain is unified — `cargo` handles building, testing, dependency management, and publishing. In others like Python, the unification happens at a specification level — rather than a single tool, there are standardized specifications that define how packaging works, allowing multiple competing tools for each task (`pip` vs [`uv`](https://docs.astral.sh/uv/), `setuptools` vs [`hatch`](https://hatch.pypa.io/) vs [`poetry`](https://python-poetry.org/)). And in some ecosystems like LaTeX, distributions like TeX Live or MacTeX come bundled with thousands of packages pre-installed.
@@ -54,8 +76,24 @@ Introducing dependencies also introduces dependency conflicts. Conflicts happen 
 
 This situation — where multiple packages require mutually incompatible versions of shared dependencies — is commonly referred to as *dependency hell*. One way to deal with conflicts is to isolate the dependencies of each program into their own *environment*. In Python we create a virtual environment by running:
 
-```
-$  /usr/bin/python $  pwd/home/missingsemester $  -m $  source $  /home/missingsemester/venv/bin/python $  /home/missingsemester/venv/bin/pip $  -c'import requests; print(requests.__path__)'['/home/missingsemester/venv/lib/python3.11/site-packages/requests'] $  Package Version ------- ------- pip 24.0 
+```console
+$ which python
+/usr/bin/python
+$ pwd
+/home/missingsemester
+$ python -m venv venv
+$ source venv/bin/activate
+$ which python
+/home/missingsemester/venv/bin/python
+$ which pip
+/home/missingsemester/venv/bin/pip
+$ python -c 'import requests; print(requests.__path__)'
+['/home/missingsemester/venv/lib/python3.11/site-packages/requests']
+
+$ pip list
+Package Version
+------- -------
+pip     24.0
 ```
 
 You can think of an environment as an entire standalone version of the language runtime with its own set of installed packages. This virtual environment or venv isolates the installed dependencies from the global Python installation. It is a good practice to have a virtual environment for each project, containing the dependencies it requires.
@@ -66,16 +104,36 @@ In some languages, the installation protocol is not defined by a tool but as a s
 
 Using `uv` instead of `pip` follows the same interface but is significantly faster:
 
-```
-$  install Resolved 5 packages in 12ms Prepared 5 packages in 0.45ms Installed 5 packages in 8ms + certifi==2024.8.30 + charset-normalizer==3.4.0 + idna==3.10 + requests==2.32.3 + urllib3==2.2.3 
+```console
+$ uv pip install requests
+Resolved 5 packages in 12ms
+Prepared 5 packages in 0.45ms
+Installed 5 packages in 8ms
+ + certifi==2024.8.30
+ + charset-normalizer==3.4.0
+ + idna==3.10
+ + requests==2.32.3
+ + urllib3==2.2.3
 ```
 
 > We strongly recommend using `uv pip` instead of `pip` whenever possible as it dramatically reduces the installation time.
 
 Beyond dependency isolation, environments also allow you to have different versions of your programming language runtime.
 
-```
-$  --pythonUsing CPython 3.12.7 Creating virtual environment at: venv312 $  source && --versionPython 3.12.7 $  --pythonUsing CPython 3.11.10 Creating virtual environment at: venv311 $  source && --versionPython 3.11.10 
+```console
+$ uv venv --python 3.12 venv312
+Using CPython 3.12.7
+Creating virtual environment at: venv312
+
+$ source venv312/bin/activate && python --version
+Python 3.12.7
+
+$ uv venv --python 3.11 venv311
+Using CPython 3.11.10
+Creating virtual environment at: venv311
+
+$ source venv311/bin/activate && python --version
+Python 3.11.10
 ```
 
 This helps when you need to test your code across multiple Python versions or when a project requires a specific version.
@@ -86,8 +144,17 @@ This helps when you need to test your code across multiple Python versions or wh
 
 In software development we differentiate between source code and artifacts. Developers write and read source code, while artifacts are the packaged, distributable outputs produced from that source code — ready to be installed or deployed. An artifact can be as simple as a file of code that we run, and as complex as an entire Virtual Machine that contains all the necessary bits and bobs of an application. Consider this example where we have a Python file `greet.py` in our current directory:
 
-```
-$  cat def greet(name): print(f"Hello, {name}!") $  -c"from greet import greet; greet('World')"Hello, World! $  cd $  -c"from greet import greet; greet('World')"ModuleNotFoundError: No module named 'greet' 
+```console
+$ cat greet.py
+def greet(name):
+    print(f"Hello, {name}!")
+
+$ python -c "from greet import greet; greet('World')"
+Hello, World!
+
+$ cd /tmp
+$ python -c "from greet import greet; greet('World')"
+ModuleNotFoundError: No module named 'greet'
 ```
 
 The import fails once we move to a different directory because Python only searches for modules in specific locations (the current directory, installed packages, and paths in `PYTHONPATH`). Packaging solves this by installing the code into a known location.
@@ -98,36 +165,79 @@ In Python, packaging a library involves producing an artifact that package insta
 
 Here’s a minimal `pyproject.toml` for a library that also provides a command-line tool:
 
-```
-[project] name = "greeting" version ="0.1.0" description = "A simple greeting library" dependencies =["typer>=0.9"][project.scripts] greet ="greeting:cli"[build-system] requires =["setuptools>=61.0"]build-backend ="setuptools.build_meta"
+```toml
+[project]
+name = "greeting"
+version = "0.1.0"
+description = "A simple greeting library"
+dependencies = ["typer>=0.9"]
+
+[project.scripts]
+greet = "greeting:cli"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 ```
 
 The `typer` library is a popular Python package for creating command-line interfaces with minimal boilerplate.
 
 And the corresponding `greeting.py`:
 
-```
-import typer def greet(name: str) -> None: print(f"Hello, {name}!") def cli() -> None: typer. run(greet) if __name__ == "__main__": cli()
+```python
+import typer
+
+
+def greet(name: str) -> None:
+    print(f"Hello, {name}!")
+
+
+def cli() -> None:
+    typer.run(greet)
+
+
+if __name__ == "__main__":
+    cli()
 ```
 
 With this file, we can now build the wheel:
 
-```
-$  Building source distribution... Building wheel from source distribution... Successfully built dist/greeting-0.1.0.tar.gz Successfully built dist/greeting-0.1.0-py3-none-any.whl $  ls greeting-0.1.0-py3-none-any.whl greeting-0.1.0.tar.gz 
+```console
+$ uv build
+Building source distribution...
+Building wheel from source distribution...
+Successfully built dist/greeting-0.1.0.tar.gz
+Successfully built dist/greeting-0.1.0-py3-none-any.whl
+
+$ ls dist/
+greeting-0.1.0-py3-none-any.whl
+greeting-0.1.0.tar.gz
 ```
 
 The `.whl` file is the wheel (a zip archive with a specific structure), and the `.tar.gz` is a source distribution for systems that need to build from source.
 
 You can inspect the contents of a wheel to see what gets packaged:
 
-```
-$  -lArchive: dist/greeting-0.1.0-py3-none-any.whl Length Date Time Name --------- ---------- ----- ---- 150 2024-01-15 10:30 greeting.py 312 2024-01-15 10:30 greeting-0.1.0.dist-info/METADATA 92 2024-01-15 10:30 greeting-0.1.0.dist-info/WHEEL 9 2024-01-15 10:30 greeting-0.1.0.dist-info/top_level.txt 435 2024-01-15 10:30 greeting-0.1.0.dist-info/RECORD --------- ------- 998 5 files 
+```console
+$ unzip -l dist/greeting-0.1.0-py3-none-any.whl
+Archive:  dist/greeting-0.1.0-py3-none-any.whl
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      150  2024-01-15 10:30   greeting.py
+      312  2024-01-15 10:30   greeting-0.1.0.dist-info/METADATA
+       92  2024-01-15 10:30   greeting-0.1.0.dist-info/WHEEL
+        9  2024-01-15 10:30   greeting-0.1.0.dist-info/top_level.txt
+      435  2024-01-15 10:30   greeting-0.1.0.dist-info/RECORD
+---------                     -------
+      998                     5 files
 ```
 
 Now if we were to give this wheel to someone else, they could install it by running:
 
-```
-$  install $  Hello, Alice! 
+```console
+$ uv pip install ./greeting-0.1.0-py3-none-any.whl
+$ greet Alice
+Hello, Alice!
 ```
 
 This would install the library we built earlier into their environment, including the `greet` cli tool.
@@ -158,8 +268,14 @@ To simplify this problem there are conventions on how to version software, and o
 
 In the `pyproject.toml` we have different ways of constraining the ranges of compatible versions of our dependencies:
 
-```
-[project] dependencies =["requests= =2.32. 3", # Exact version - only this specific version  "click> =8.0", # Minimum version - 8.0 or newer  "numpy> =1.24,<2.0", # Range - at least 1.24 but less than 2.0  "pandas~ =2.1. 0", # Compatible release - >=2.1.0 and <2.2.0  ]
+```toml
+[project]
+dependencies = [
+    "requests==2.32.3",  # Exact version - only this specific version
+    "click>=8.0",        # Minimum version - 8.0 or newer
+    "numpy>=1.24,<2.0",  # Range - at least 1.24 but less than 2.0
+    "pandas~=2.1.0",     # Compatible release - >=2.1.0 and <2.2.0
+]
 ```
 
 Version specifiers exist across many package managers (npm, cargo, etc.) with varying exact semantics. The `~=` operator is Python’s “compatible release” operator — `~=2.1.0` means “any version that is compatible with 2.1.0”, which translates to `>=2.1.0` and `<2.2.0`. This is roughly equivalent to the caret (`^`) operator in npm and cargo, which follows SemVer’s notion of compatibility.
@@ -174,8 +290,23 @@ Pinning a library refers to specifying an exact version rather than a range, e.g
 
 Part of the job of a package manager is to consider all the constraints provided by the dependencies — and transitive dependencies — and then produce a valid list of versions that will satisfy all the constraints. The specific list of versions can then be saved to a file for reproducibility purposes; these files are referred to as *lock files*.
 
-```
-$  Resolved 12 packages in 45ms $  cat head -20version = 1 requires-python = "> = "  [[package]] name = "certifi" version = "2024.8.30" source = { registry = "https://pypi.org/simple" } sdist = { url = "https://files.pythonhosted.org/...", hash = "sha256:..." } wheels = [ { url = "https://files.pythonhosted.org/...", hash = "sha256:..." }, ] ... 
+```console
+$ uv lock
+Resolved 12 packages in 45ms
+
+$ cat uv.lock | head -20
+version = 1
+requires-python = ">=3.11"
+
+[[package]]
+name = "certifi"
+version = "2024.8.30"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/...", hash = "sha256:..." }
+wheels = [
+    { url = "https://files.pythonhosted.org/...", hash = "sha256:..." },
+]
+...
 ```
 
 One critical distinction when dealing with dependency versioning and reproducibility is the difference between libraries and applications/services. A library is intended to be imported and used by other code which might have its own dependencies, so specifying overly strict version constraints can cause conflicts with the user’s other dependencies. In contrast, applications or services are final consumers of the software and typically expose their functionality through a user interface or an API, not through a programming interface. For libraries, it is good practice to specify version ranges to maximize compatibility with the wider package ecosystem. For applications, pinning exact versions ensures reproducibility — everyone running the application uses the exact same dependencies.
@@ -198,14 +329,25 @@ The most popular container platform is [Docker](https://www.docker.com/). Docker
 
 Running a container is straightforward. For example, to run a Python interpreter inside a container we use `docker run` (The `-it` flags make the container interactive with a terminal. When you exit, the container stops.).
 
-```
-$  -itPython 3.12.7 (main, Nov 5 2024, 02:53:25) [GCC 12.2.0] on linux >>>("Hello from inside a container!")Hello from inside a container! 
+```console
+$ docker run -it python:3.12 python
+Python 3.12.7 (main, Nov  5 2024, 02:53:25) [GCC 12.2.0] on linux
+>>> print("Hello from inside a container!")
+Hello from inside a container!
 ```
 
 In practice your program might depend on the entire filesystem. To overcome this, we can use container images that ship the entire filesystem of the application as the artifact. The container images are created programmatically. With docker we specify exactly the dependencies, system libraries, and configuration of the image using a Dockerfile syntax:
 
-```
-FROM python:3.12 RUN RUN install -y RUN install -y RUN install RUN install COPY . /app WORKDIR /app RUN install
+```dockerfile
+FROM python:3.12
+RUN apt-get update
+RUN apt-get install -y gcc
+RUN apt-get install -y libpq-dev
+RUN pip install numpy
+RUN pip install pandas
+COPY . /app
+WORKDIR /app
+RUN pip install .
 ```
 
 An important distinction: a Docker **image** is the packaged artifact (like a template), while a **container** is a running instance of that image. You can run multiple containers from the same image. Images are built in layers, where each instruction (`FROM`, `RUN`, `COPY`, etc) in a Dockerfile creates a new layer. Docker caches these layers, so if you change a line in your Dockerfile, only that layer and subsequent layers need to be rebuilt.
@@ -214,8 +356,18 @@ The previous Dockerfile has several issues: it uses the full Python image instea
 
 Here’s an improved version
 
-```
-FROM python:3.12-slim COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv RUN && \ install -y --no-install-recommends && \ rm -rf* WORKDIR /app ENV PATH="/app/.venv/bin:$PATH" COPY pyproject.toml uv.lock ./ RUN sync --locked --no-dev --no-install-project COPY . . RUN sync --locked --no-dev
+```dockerfile
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH"
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+COPY . .
+RUN uv sync --locked --no-dev
 ```
 
 In the previous example we see that instead of installing `uv` from source, we are copying the prebuilt binary from the `ghcr.io/astral-sh/uv:latest` image. This is known as the *builder* pattern. With this pattern we do not need to ship all the tools needed to compile our code, just the final binary that is needed to run the application (`uv` in this case).
@@ -230,14 +382,24 @@ Software is inherently configurable. In the [command line environment](/2026/com
 
 Here’s an example of an application that is configured via environment variables:
 
-```
-import os DATABASE_URL = os. environ. get("DATABASE_URL","sqlite:///local.db") DEBUG = os. environ. get("DEBUG", "false"). lower() == "true" API_KEY = os. environ["API_KEY"]# Required - will raise if not set 
+```python
+import os
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///local.db")
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+API_KEY = os.environ["API_KEY"]  # Required - will raise if not set
 ```
 
 An application could also be configured via a configuration file (e.g., a Python program that loads a config via `yaml.load`), `config.yaml`:
 
-```
-database: url: "postgresql://localhost/myapp" pool_size: 5 server: host: "0.0.0.0" port: 8080 debug: false
+```yaml
+database:
+  url: "postgresql://localhost/myapp"
+  pool_size: 5
+server:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false
 ```
 
 A good right-hand rule for thinking about configuration is that the same codebase should be deployable to different environments (development, staging, production) with only configuration changes, never code changes.
@@ -252,16 +414,47 @@ As an example, if we determine our application might benefit from using a cache,
 
 [Docker Compose](https://docs.docker.com/compose/) is a tool for defining and running multi-container applications. Rather than managing containers individually, you declare all services in a single YAML file and orchestrate them together. Now our full application encompasses more than one container:
 
-```
-# docker-compose.yml services: web: build:. ports: - "8080:8080" environment: -REDIS_URL=redis://cache:6379 depends_on: - cache cache: image:redis:7-alpine volumes: -redis_data:/data volumes: redis_data:
+```yaml
+# docker-compose.yml
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://cache:6379
+    depends_on:
+      - cache
+
+  cache:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
 ```
 
 With `docker compose up`, both services start together, and the web application can connect to Redis using the hostname `cache` (Docker’s internal DNS resolves service names automatically). Docker Compose lets us declare how we want to deploy one or more services, and handles the orchestration of starting them together, setting up networking between them, and managing shared volumes for data persistence.
 
 For production deployments, you often want your docker compose services to start automatically on boot and restart on failure. A common approach is to use systemd to manage the docker compose deployment:
 
-```
-# /etc/systemd/system/myapp.service [Unit] Description = My Application Requires =docker.service After =docker.service[Service] Type = oneshot RemainAfterExit = yes WorkingDirectory =/opt/myapp ExecStart =/usr/bin/docker compose up -d ExecStop =/usr/bin/docker compose down[Install] WantedBy =multi-user.target
+```ini
+# /etc/systemd/system/myapp.service
+[Unit]
+Description=My Application
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/myapp
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 This systemd unit file ensures your application starts when the system boots (after Docker is ready), and provides standard controls like `systemctl start myapp`, `systemctl stop myapp`, and `systemctl status myapp`.
@@ -270,8 +463,13 @@ As deployment requirements grow more complex — needing scalability across mult
 
 This multi-container setup is partly feasible because modern services communicate with each other via standardized APIs, with HTTP REST APIs. For example, whenever a program interacts with an LLM provider like OpenAI or Anthropic, under the hood it is sending an HTTP request to their servers and parsing the response:
 
-```
-$  \ -H "x-api-key: $ " \   -H "content-type: application/json" \ -H "anthropic-version: 2023-06-01" \ -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 256, "messages": [{"role": "user", "content": "Explain containers vs VMs in one sentence."}]}' 
+```console
+$ curl https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "content-type: application/json" \
+    -H "anthropic-version: 2023-06-01" \
+    -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 256,
+         "messages": [{"role": "user", "content": "Explain containers vs VMs in one sentence."}]}'
 ```
 
 # Publishing
@@ -284,34 +482,47 @@ These days, GitHub has become the de facto platform for publishing source code a
 
 Package managers sometimes support installing directly from GitHub, either from source or from a pre-built wheel:
 
-```
-#  source() $  install  #  $  install  #  $  install 
+```console
+# Install from source (will clone and build)
+$ pip install git+https://github.com/psf/requests.git
+
+# Install from a specific tag/branch
+$ pip install git+https://github.com/psf/requests.git@v2.32.3
+
+# Install a wheel directly from a GitHub release
+$ pip install https://github.com/user/repo/releases/download/v1.0/package-1.0-py3-none-any.whl
 ```
 
 In fact, some languages like Go use a decentralized distribution model — rather than a central package repository, Go modules are distributed directly from their source code repositories. Module paths like `github.com/gorilla/mux` indicate where the code lives, and `go get` fetches directly from there. However, most package managers like `pip`, `cargo`, or `brew` have central indexes of pre-packaged projects for ease of distribution and installation. If we run
 
-```
-$  install --verbose --no-cache grep -F'.whl'DEBUG Selecting: requests==2.32.5 [compatible] (requests-2.32.5-py3-none-any.whl) DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl.metadata DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl 
+```console
+$ uv pip install requests --verbose --no-cache 2>&1 | grep -F '.whl'
+DEBUG Selecting: requests==2.32.5 [compatible] (requests-2.32.5-py3-none-any.whl)
+DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl.metadata
+DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl
 ```
 
 we see where we are fetching the `requests` wheel from. Notice the `py3-none-any` in the filename — this means the wheel works with any Python 3 version, on any OS, on any architecture. For packages with compiled code, the wheel is platform-specific:
 
-```
-$  install --verbose --no-cache grep -F'.whl'DEBUG Selecting: numpy==2.2.1 [compatible] (numpy-2.2.1-cp312-cp312-macosx_14_0_arm64.whl) 
+```console
+$ uv pip install numpy --verbose --no-cache 2>&1 | grep -F '.whl'
+DEBUG Selecting: numpy==2.2.1 [compatible] (numpy-2.2.1-cp312-cp312-macosx_14_0_arm64.whl)
 ```
 
 Here `cp312-cp312-macosx_14_0_arm64` indicates this wheel is specifically for CPython 3.12 on macOS 14+ for ARM64 (Apple Silicon). If you’re on a different platform, `pip` will download a different wheel or build from source.
 
 Conversely, for people to be able to find a package we’ve created, we need to publish it to one of these registries. In Python, the main registry is the [Python Package Index (PyPI)](https://pypi.org). Like with installing, there are multiple ways of publishing packages. The `uv publish` command provides a modern interface for uploading packages to PyPI:
 
-```
-$  --publish-urlPublishing greeting-0.1.0.tar.gz Publishing greeting-0.1.0-py3-none-any.whl 
+```console
+$ uv publish --publish-url https://test.pypi.org/legacy/
+Publishing greeting-0.1.0.tar.gz
+Publishing greeting-0.1.0-py3-none-any.whl
 ```
 
 Here we are using [TestPyPI](https://test.pypi.org) — a separate package registry intended for testing your publishing workflow without polluting the real PyPI. Once uploaded, you can install from TestPyPI:
 
-```
-$  install --index-url
+```console
+$ uv pip install --index-url https://test.pypi.org/simple/ greeting
 ```
 
 A key consideration when publishing software is trust. How do users verify that the package they download actually comes from you and hasn’t been tampered with? Package registries use checksums to verify integrity, and some ecosystems support package signing to provide cryptographic proof of authorship.

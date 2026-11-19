@@ -27,6 +27,7 @@ MIT「The Missing Semester of Your CS Education」2026 版（IAP 2026）全部 9
 
 ## 关于翻译
 
+- 英文讲义取自课程仓库 [`_2026/`](https://github.com/missing-semester/missing-semester/tree/master/_2026) 的 Markdown 原文，而不是官网渲染后的 HTML。这样终端记录会保留换行，`<TAB>`、`<C-b>`、`<PID>` 这类尖括号写法也不会在转换时被吃掉。
 - 每篇译文为对应英文讲义的完整翻译（含全部练习题），代码块、命令、工具名、链接地址保持原文不译。
 - 术语首次出现时尽量标注英文原词，方便对照。
 - 翻译由 AI 辅助完成，如有错译欢迎提 issue / PR。

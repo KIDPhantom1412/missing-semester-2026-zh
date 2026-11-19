@@ -9,13 +9,26 @@ In particular, shell scripting is tightly bound by *conventions*. For a command 
 Writing a function in most programming languages looks something like:
 
 ```
-def add(x: int, y: int) -> int: return x + y 
+def add(x: int, y: int) -> int:
+    return x + y
 ```
 
 Here we can explicitly see the inputs and the outputs of the program. In contrast, shell scripts can look quite different at first glance.
 
-```
-#!/usr/bin/env bash if[[-f $1]]; then echo "Target file already exists" exit else if $DEBUG; then grep 'error' tee $1 else grep 'error'> $1 fi exit fi
+```shell
+#!/usr/bin/env bash
+
+if [[ -f $1 ]]; then
+    echo "Target file already exists"
+    exit 1
+else
+    if $DEBUG; then
+        grep 'error' - | tee $1
+    else
+        grep 'error' - > $1
+    fi
+    exit 0
+fi
 ```
 
 To properly understand what is going in scripts like this one we first need to introduce a few concepts that appear often when shell programs communicate with each other or with the shell environment:
@@ -40,16 +53,21 @@ You will see double dash flags with long names like `--all`, and single dash fla
 
 Another common convention in CLI programs is for programs to accept a variable number of arguments of the same type. When given arguments in this way the command performs the same operation on each one of them.
 
-```
-mkdir mkdir # is equivalent to mkdir 
+```shell
+mkdir src
+mkdir docs
+# is equivalent to
+mkdir src docs
 ```
 
 This syntax sugar might seem unnecessary at first, but it becomes really powerful when combined with *globbing*. Globbing or globs are special patterns that the shell will expand before calling the program.
 
 Say we wanted to delete all .py files in the current folder nonrecursively. From what we learned in the previous lecture we could achieve this by running
 
-```
-for in$(ls grep -P'\.py$'); do rm " $file " done
+```shell
+for file in $(ls | grep -P '\.py$'); do
+    rm "$file"
+done
 ```
 
 But we can replace that with just `rm *.py`!
@@ -60,8 +78,22 @@ The most common globs you will find are wildcards `*` (zero or more of anything)
 
 In practice, globs are best understood with motivating examples.
 
-```
-touch {} # Will expand to touch {} # Will expand to cp{} # Will expand to cp # Globbing techniques can also be combined mv*{}# Will move all *.py and *.sh files
+```shell
+touch folder/{a,b,c}.py
+# Will expand to
+touch folder/a.py folder/b.py folder/c.py
+
+convert image.{png,jpg}
+# Will expand to
+convert image.png image.jpg
+
+cp /path/to/project/{setup,build,deploy}.sh /newpath
+# Will expand to
+cp /path/to/project/setup.sh /path/to/project/build.sh /path/to/project/deploy.sh /newpath
+
+# Globbing techniques can also be combined
+mv *{.py,.sh} folder
+# Will move all *.py and *.sh files
 ```
 
 > Some shells (e.g. zsh) support even more advanced forms of globbing such as `**` that will expand to include recursive paths. So `rm **/*.py` will delete all .py files recursively.
@@ -70,8 +102,8 @@ touch {} # Will expand to touch {} # Will expand to cp{} # Will expand to cp # G
 
 Whenever we execute a program pipeline like
 
-```
-cat grep -P'\d+' uniq -c
+```shell
+cat myfile | grep -P '\d+' | uniq -c
 ```
 
 we see that the `grep` program is communicating with both the `cat` and `uniq` programs.
@@ -80,34 +112,66 @@ An important observation here is that all three programs are executing at once. 
 
 We can demonstrate this concurrency, all commands in a pipeline start immediately:
 
-```
-$  (sleep && cat ) grep -P '^\d$' sort uniq[1] 12345 $  grep -P'(sleep|cat|grep|sort|uniq)' 32930 pts/1 00:00:00 sleep 32931 pts/1 00:00:00 grep 32932 pts/1 00:00:00 sort 32933 pts/1 00:00:00 uniq 32948 pts/1 00:00:00 grep 
+```console
+$ (sleep 15 && cat numbers.txt) | grep -P '^\d$' | sort | uniq  &
+[1] 12345
+$ ps | grep -P '(sleep|cat|grep|sort|uniq)'
+  32930 pts/1    00:00:00 sleep
+  32931 pts/1    00:00:00 grep
+  32932 pts/1    00:00:00 sort
+  32933 pts/1    00:00:00 uniq
+  32948 pts/1    00:00:00 grep
 ```
 
 We can see that all processes but `cat` are running right away. The shell spawns all processes and connects their streams before any of them finish. `cat` will only get started once sleep finishes, and the output of `cat` will be sent to grep and so on and so forth.
 
 Every program has an input stream, labeled stdin (for standard input). When piping, stdin is connected automatically. Within a script, many programs accept `-` as a filename to mean “read from stdin”:
 
-```
-# These are equivalent when data comes from a pipe echo "hello" grep "hello" echo "hello" grep "hello"
+```shell
+# These are equivalent when data comes from a pipe
+echo "hello" | grep "hello"
+echo "hello" | grep "hello" -
 ```
 
 Similarly, every program has two output streams: stdout and stderr. The standard output is the one most commonly encountered and it is the one that is used for piping the output of the program to the next command in the pipeline. The standard error is an alternative stream that is intended for programs to report warnings and other types of issues, without that output getting parsed by the next command in the chain.
 
-```
-$  lsls: cannot access '/nonexistent': No such file or directory $  ls grep "pattern"ls: cannot access '/nonexistent': No such file or directory #  $  ls #  
+```console
+$ ls /nonexistent
+ls: cannot access '/nonexistent': No such file or directory
+$ ls /nonexistent | grep "pattern"
+ls: cannot access '/nonexistent': No such file or directory
+# The error message still appears because stderr is not piped
+$ ls /nonexistent 2>/dev/null
+# No output - stderr was redirected to /dev/null
 ```
 
 The shell provides syntax for redirecting these streams. Here are some illustrative examples.
 
-```
-# Redirect stdout to a file (overwrite) echo "hello"># Redirect stdout to a file (append) echo "world">> # Redirect stderr to a file ls # Redirect both stdout and stderr to the same file ls # Redirect stdin from a file grep "pattern"# Discard output by redirecting to /dev/null>
+```shell
+# Redirect stdout to a file (overwrite)
+echo "hello" > output.txt
+
+# Redirect stdout to a file (append)
+echo "world" >> output.txt
+
+# Redirect stderr to a file
+ls foobar 2> errors.txt
+
+# Redirect both stdout and stderr to the same file
+ls foobar &> all_output.txt
+
+# Redirect stdin from a file
+grep "pattern" < input.txt
+
+# Discard output by redirecting to /dev/null
+cmd > /dev/null 2>&1
 ```
 
 Another powerful tool that exemplifies the Unix philosophy is [`fzf`](https://github.com/junegunn/fzf), a fuzzy finder. It reads lines from stdin and provides an interactive interface to filter and select:
 
-```
-$  ls $  cat
+```console
+$ ls | fzf
+$ cat ~/.bash_history | fzf
 ```
 
 `fzf` can be integrated with many shell operations. We’ll see more uses of it when we discuss shell customization.
@@ -118,14 +182,20 @@ To assign variables in bash we use the syntax `foo=bar`, and then access the val
 
 Shell variables do not have types, they are all strings. Note that when writing string expressions in the shell single and double quotes are not interchangeable. Strings delimited with `'` are literal strings and will not expand variables, perform command substitution, or process escape sequences, whereas `"` delimited strings will.
 
-```
-foo = echo " $foo " # prints bar echo '$foo' # prints $foo
+```shell
+foo=bar
+echo "$foo"
+# prints bar
+echo '$foo'
+# prints $foo
 ```
 
 To capture the output of a command into a variable we use *command substitution*. When we execute
 
-```
-files =$(ls) echo " $files " grep echo " $files " grep".py"
+```shell
+files=$(ls)
+echo "$files" | grep README
+echo "$files" | grep ".py"
 ```
 
 the output (concretely the stdout) of ls is placed into the variable `$files` which we can access later. The content of the `$files` variable does include the newlines from the ls output, which is how programs like `grep` know to operate on each item independently.
@@ -136,14 +206,18 @@ Whenever a shell program calls another program it passes along a set of variable
 
 > Environment variables are conventionally written in ALL\_CAPS (e.g., `HOME`, `PATH`, `DEBUG`). This is a convention, not a technical requirement, but following it helps distinguish environment variables from local shell variables which are typically lowercase.
 
-```
-TZ = date # prints the current time in Tokyo echo $TZ# this will be empty, since TZ was only set for the child command
+```shell
+TZ=Asia/Tokyo date  # prints the current time in Tokyo
+echo $TZ  # this will be empty, since TZ was only set for the child command
 ```
 
 Alternatively, we can use the `export` built-in function that will modify our current environment and thus all child processes will inherit the variable:
 
-```
-export DEBUG =# All programs from this point onwards will have DEBUG=1 in their environment -c 'echo $DEBUG' # prints 1
+```shell
+export DEBUG=1
+# All programs from this point onwards will have DEBUG=1 in their environment
+bash -c 'echo $DEBUG'
+# prints 1
 ```
 
 To delete a variable use the `unset` built-in command, e.g. `unset DEBUG`.
@@ -158,22 +232,42 @@ By default a shell script will return exit code zero. The convention is that zer
 
 The shell has boolean operators `&&` and `||` for performing AND and OR operations respectively. Unlike those encountered in regular programming languages, the ones in the shell operate on the return code of programs. Both of these are [short-circuiting](https://en.wikipedia.org/wiki/Short-circuit_evaluation) operators. This means that they can be used to conditionally run commands based on the success or failure of previous commands, where success is determined based on whether the return code is zero or not. Some examples:
 
-```
-# echo will only run if grep succeeds (finds a match) grep -q "pattern" && echo "Pattern found"# echo will only run if grep fails (no match) grep -q "pattern" || echo "Pattern not found" # true is a shell program that always succeeds true && echo "This will always print" # and false is a shell program that always fails false || echo "This will always print"
+```shell
+# echo will only run if grep succeeds (finds a match)
+grep -q "pattern" file.txt && echo "Pattern found"
+
+# echo will only run if grep fails (no match)
+grep -q "pattern" file.txt || echo "Pattern not found"
+
+# true is a shell program that always succeeds
+true && echo "This will always print"
+
+# and false is a shell program that always fails
+false || echo "This will always print"
 ```
 
 The same principle applies to `if` and `while` statements, they both use return codes to make decisions:
 
-```
-# if uses the return code of the condition command (0 = true, nonzero = false) if grep -q "pattern"; then echo "Found" fi # while loops continue as long as the command returns 0 while read ; do echo " $line " done
+```shell
+# if uses the return code of the condition command (0 = true, nonzero = false)
+if grep -q "pattern" file.txt; then
+    echo "Found"
+fi
+
+# while loops continue as long as the command returns 0
+while read line; do
+    echo "$line"
+done < file.txt
 ```
 
 ## Signals
 
 In some cases you will need to interrupt a program while it is executing, for instance if a command is taking too long to complete. The simplest way to interrupt a program is to press `Ctrl-C` and the command will probably stop. But how does this actually work and why does it sometimes fail to stop the process?
 
-```
-$  sleep ^C $  
+```console
+$ sleep 100
+^C
+$
 ```
 
 > Note, here `^C` is how `Ctrl-C` is displayed when typed in the terminal.
@@ -189,17 +283,33 @@ Signals are a special communication mechanism. When a process receives a signal 
 
 In our case, when typing `Ctrl-C` this prompts the shell to deliver a `SIGINT` signal to the process. Here’s a minimal example of a Python program that captures `SIGINT` and ignores it, no longer stopping. To kill this program we can now use the `SIGQUIT` signal instead, by typing `Ctrl-\`.
 
-```
-#!/usr/bin/env python import signal, time def handler(signum, time): print(" \nI got a SIGINT, but I am not stopping") signal. signal(signal. SIGINT, handler) i = 0 while True: time. sleep(. 1) print(" \r{}". format(i), end = "") i += 1
+```python
+#!/usr/bin/env python
+import signal, time
+
+def handler(signum, time):
+    print("\nI got a SIGINT, but I am not stopping")
+
+signal.signal(signal.SIGINT, handler)
+i = 0
+while True:
+    time.sleep(.1)
+    print("\r{}".format(i), end="")
+    i += 1
 ```
 
 Here’s what happens if we send `SIGINT` twice to this program, followed by `SIGQUIT`. Note that `^` is how `Ctrl` is displayed when typed in the terminal.
 
-```
-$  24^C I got a SIGINT, but I am not stopping 26^C I got a SIGINT, but I am not stopping 30^\[1] 39913 quit python sigint.py 
+```console
+$ python sigint.py
+24^C
+I got a SIGINT, but I am not stopping
+26^C
+I got a SIGINT, but I am not stopping
+30^\[1]    39913 quit       python sigint.py
 ```
 
-While `SIGINT` and `SIGQUIT` are both usually associated with terminal related requests, a more generic signal for asking a process to exit gracefully is the `SIGTERM` signal. To send this signal we can use the [`kill`](https://www.man7.org/linux/man-pages/man1/kill.1.html) command, with the syntax `kill -TERM` .
+While `SIGINT` and `SIGQUIT` are both usually associated with terminal related requests, a more generic signal for asking a process to exit gracefully is the `SIGTERM` signal. To send this signal we can use the [`kill`](https://www.man7.org/linux/man-pages/man1/kill.1.html) command, with the syntax `kill -TERM <PID>`.
 
 Signals can do other things beyond killing a process. For instance, `SIGSTOP` pauses a process. In the terminal, typing `Ctrl-Z` will prompt the shell to send a `SIGTSTP` signal, short for Terminal Stop (i.e. the terminal’s version of `SIGSTOP`).
 
@@ -214,7 +324,28 @@ Note that backgrounded processes are still children processes of your terminal a
 Below is a sample session to showcase some of these concepts.
 
 ```
-$ sleep 1000 ^Z [1] + 18653 suspended sleep 1000 $ nohup sleep 2000 & [2] 18745 appending output to nohup.out $ jobs [1] + suspended sleep 1000 [2] - running nohup sleep 2000 $ kill -SIGHUP %1 [1] + 18653 hangup sleep 1000 $ kill -SIGHUP %2 # nohup protects from SIGHUP $ jobs [2] + running nohup sleep 2000 $ kill %2 [2] + 18745 terminated nohup sleep 2000 
+$ sleep 1000
+^Z
+[1]  + 18653 suspended  sleep 1000
+
+$ nohup sleep 2000 &
+[2] 18745
+appending output to nohup.out
+
+$ jobs
+[1]  + suspended  sleep 1000
+[2]  - running    nohup sleep 2000
+
+$ kill -SIGHUP %1
+[1]  + 18653 hangup     sleep 1000
+
+$ kill -SIGHUP %2   # nohup protects from SIGHUP
+
+$ jobs
+[2]  + running    nohup sleep 2000
+
+$ kill %2
+[2]  + 18745 terminated  nohup sleep 2000
 ```
 
 A special signal is `SIGKILL` since it cannot be captured by the process and it will always terminate it immediately. However, it can have bad side effects such as leaving orphaned children processes.
@@ -223,24 +354,35 @@ You can learn more about these and other signals [here](https://en.wikipedia.org
 
 Within shell scripts, you can use the `trap` built-in to execute commands when signals are received. This is useful for cleanup operations:
 
-```
-#!/usr/bin/env bash(){echo"Cleaning up temporary files..." rm -f*} trap # Run cleanup when script exits trap # Also on Ctrl-C or kill
+```shell
+#!/usr/bin/env bash
+cleanup() {
+    echo "Cleaning up temporary files..."
+    rm -f /tmp/mytemp.*
+}
+trap cleanup EXIT  # Run cleanup when script exits
+trap cleanup SIGINT SIGTERM  # Also on Ctrl-C or kill
 ```
 
 # Remote Machines
 
 It has become more and more common for programmers to work with remote servers in their everyday work. The most common tool for the job here is SSH (Secure Shell) which will help us connect to a remote server and provide the now familiar shell interface. We connect to a server with a command like:
 
-```
-ssh alice@server.mit.edu 
+```bash
+ssh alice@server.mit.edu
 ```
 
 Here we are trying to ssh as user `alice` in server `server.mit.edu`.
 
 An often overlooked feature of `ssh` is the ability to run commands non-interactively. `ssh` correctly handles sending the stdin and receiving the stdout of the command, so we can combine it with other commands
 
-```
-# here ls runs in the remote, and wc runs locally ls wc -l # here both ls and wc run in the server'ls | wc -l'
+```shell
+# here ls runs in the remote, and wc runs locally
+ssh alice@server ls | wc -l
+
+# here both ls and wc run in the server
+ssh alice@server 'ls | wc -l'
+
 ```
 
 > Try installing [Mosh](https://mosh.org/) as a SSH replacement that can handle disconnections, entering/exiting sleep, changing networks and dealing with high latency links.
@@ -249,24 +391,36 @@ For `ssh` to let us run commands in the remote server we need to prove that we a
 
 To generate a pair you can run [`ssh-keygen`](https://www.man7.org/linux/man-pages/man1/ssh-keygen.1.html).
 
-```
--a -t -f
+```bash
+ssh-keygen -a 100 -t ed25519 -f ~/.ssh/id_ed25519
 ```
 
 If you have ever configured pushing to GitHub using SSH keys, then you have probably done the steps outlined [here](https://help.github.com/articles/connecting-to-github-with-ssh/) and have a valid key pair already. To check if you have a passphrase and validate it you can run `ssh-keygen -y -f /path/to/key`.
 
 At the server side `ssh` will look into `.ssh/authorized_keys` to determine which clients it should let in. To copy a public key over you can use:
 
-```
-cat'cat >> ~/.ssh/authorized_keys'# or more simply (if ssh-copy-id is available) -i
+```bash
+cat .ssh/id_ed25519.pub | ssh alice@remote 'cat >> ~/.ssh/authorized_keys'
+
+# or more simply (if ssh-copy-id is available)
+
+ssh-copy-id -i .ssh/id_ed25519 alice@remote
 ```
 
 Beyond running commands, the connection that ssh establishes can be used to transfer files from and to the server securely. [`scp`](https://www.man7.org/linux/man-pages/man1/scp.1.html) is the most traditional tool and the syntax is `scp path/to/local_file remote_host:path/to/remote_file`. [`rsync`](https://www.man7.org/linux/man-pages/man1/rsync.1.html) improves upon `scp` by detecting identical files in local and remote, and preventing copying them again. It also provides more fine grained control over symlinks, permissions and has extra features like the `--partial` flag that can resume from a previously interrupted copy. `rsync` has a similar syntax to `scp`.
 
 SSH client configuration is located at `~/.ssh/config` and it lets us declare hosts and set default settings for them. This configuration file is not just read by `ssh` but also other programs like `scp`, `rsync`, `mosh`, &c.
 
-```
-# Configs can also take wildcards*
+```bash
+Host vm
+    User alice
+    HostName 172.16.174.141
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+
+# Configs can also take wildcards
+Host *.mit.edu
+    User alice
 ```
 
 # Terminal Multiplexers
@@ -277,28 +431,28 @@ Terminal multiplexers like [`tmux`](https://www.man7.org/linux/man-pages/man1/tm
 
 The most popular terminal multiplexer these days is [`tmux`](https://www.man7.org/linux/man-pages/man1/tmux.1.html). `tmux` is highly configurable and by using the associated keybindings you can create multiple tabs and panes and quickly navigate through them.
 
-`tmux` expects you to know its keybindings, and they all have the form  `x` where that means (1) press `Ctrl+b`, (2) release `Ctrl+b`, and then (3) press `x`. `tmux` has the following hierarchy of objects:
+`tmux` expects you to know its keybindings, and they all have the form `<C-b> x` where that means (1) press `Ctrl+b`, (2) release `Ctrl+b`, and then (3) press `x`. `tmux` has the following hierarchy of objects:
 
 * **Sessions** - a session is an independent workspace with one or more windows
   + `tmux` starts a new session.
   + `tmux new -s NAME` starts it with that name.
   + `tmux ls` lists the current sessions
-  + Within `tmux` typing  `d` detaches the current session
+  + Within `tmux` typing `<C-b> d` detaches the current session
   + `tmux a` attaches the last session. You can use `-t` flag to specify which
 * **Windows** - Equivalent to tabs in editors or browsers, they are visually separate parts of the same session
-  + `c` Creates a new window. To close it you can just terminate the shells doing
-  + `N` Go to the *N* th window. Note they are numbered
-  + `p` Goes to the previous window
-  + `n` Goes to the next window
-  + `,` Rename the current window
-  + `w` List current windows
+  + `<C-b> c` Creates a new window. To close it you can just terminate the shells doing `<C-d>`
+  + `<C-b> N` Go to the *N* th window. Note they are numbered
+  + `<C-b> p` Goes to the previous window
+  + `<C-b> n` Goes to the next window
+  + `<C-b> ,` Rename the current window
+  + `<C-b> w` List current windows
 * **Panes** - Like vim splits, panes let you have multiple shells in the same visual display.
-  + `"` Split the current pane horizontally
-  + `%` Split the current pane vertically
-  + Move to the pane in the specified *direction*. Direction here means arrow keys.
-  + `z` Toggle zoom for the current pane
-  + `[` Start scrollback. You can then press  to start a selection and  to copy that selection.
-  + Cycle through pane arrangements.
+  + `<C-b> "` Split the current pane horizontally
+  + `<C-b> %` Split the current pane vertically
+  + `<C-b> <direction>` Move to the pane in the specified *direction*. Direction here means arrow keys.
+  + `<C-b> z` Toggle zoom for the current pane
+  + `<C-b> [` Start scrollback. You can then press `<space>` to start a selection and `<enter>` to copy that selection.
+  + `<C-b> <space>` Cycle through pane arrangements.
 
 > To learn more about tmux, consider reading [this](https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/) quick tutorial and [this](https://linuxcommand.org/lc3_adv_termmux.php) more detailed explanation.
 
@@ -322,8 +476,8 @@ For `bash`, editing your `.bashrc` or `.bash_profile` will work in most systems.
 
 A common configuration change is adding new locations for the shell to find programs. You will encounter this pattern when installing software:
 
-```
-export PATH = " $PATH:path/to/append"
+```shell
+export PATH="$PATH:path/to/append"
 ```
 
 Here, we are telling the shell to set the value of the $PATH variable to its current value plus a new path, and have all children processes inherit this new value for PATH. This will allow children processes to find programs located under `path/to/append`.
@@ -332,16 +486,22 @@ Customizing your shell often means installing new command-line tools. Package ma
 
 Here’s how to install two useful tools using Homebrew on macOS:
 
-```
-# ripgrep: a faster grep with better defaults install # fd: a faster, user-friendly find install 
+```shell
+# ripgrep: a faster grep with better defaults
+brew install ripgrep
+
+# fd: a faster, user-friendly find
+brew install fd
 ```
 
 With these installed, you can use `rg` instead of `grep` and `fd` instead of `find`.
 
 > **Warning about `curl | bash`**: You’ll often see installation instructions like `curl -fsSL https://example.com/install.sh | bash`. This pattern downloads a script and immediately executes it, which is convenient but risky; you’re running code you haven’t inspected. A safer approach is to download first, review, then execute:
 >
-> ```
-> -fsSL -o # review the script
+> ```shell
+> curl -fsSL https://example.com/install.sh -o install.sh
+> less install.sh  # review the script
+> bash install.sh
 > ```
 >
 > Some installers use a slightly safer variant: `/bin/bash -c "$(curl -fsSL https://url)"` which at least ensures bash interprets the script rather than your current shell.
@@ -350,24 +510,61 @@ When you try to run a command that isn’t installed, your shell will show `comm
 
 Another useful tool is [`tldr`](https://tldr.sh/), which provides simplified, example-focused man pages. Instead of reading through lengthy documentation, you can quickly see common usage patterns:
 
-```
-$   An alternative to find. Aims to be faster and easier to use than find. Recursively find files matching a pattern in the current directory: fd "pattern" Find files that begin with "foo": fd "^foo" Find files with a specific extension: fd --extension txt 
+```console
+$ tldr fd
+  An alternative to find.
+  Aims to be faster and easier to use than find.
+
+  Recursively find files matching a pattern in the current directory:
+      fd "pattern"
+
+  Find files that begin with "foo":
+      fd "^foo"
+
+  Find files with a specific extension:
+      fd --extension txt
 ```
 
 Sometimes you don’t need a whole new program, but rather just a shortcut for an existing command with specific flags. That’s where aliases come in.
 
 We can also create our own command aliases using the `alias` shell built-in. A shell alias is a short form for another command that your shell will replace automatically before evaluating the expression. For instance, an alias in bash has the following structure:
 
-```
-alias alias_name = "command_to_alias arg1 arg2"
+```bash
+alias alias_name="command_to_alias arg1 arg2"
 ```
 
 > Note that there is no space around the equal sign `=`, because [`alias`](https://www.man7.org/linux/man-pages/man1/alias.1p.html) is a shell command that takes a single argument.
 
 Aliases have many convenient features:
 
-```
-# Make shorthands for common flags alias ll ="ls -lh" # Save a lot of typing for common commands alias gs = "git status" alias gc = "git commit" # Save you from mistyping alias sl = ls # Overwrite existing commands for better defaults alias mv ="mv -i"# -i prompts before overwrite alias mkdir ="mkdir -p"# -p make parent dirs as needed alias df ="df -h"# -h prints human readable format # Alias can be composed alias la ="ls -A" alias lla ="la -l" # To ignore an alias run it prepended with \ \l # Or disable an alias altogether with unalias unalias # To get an alias definition just call it with alias alias # Will print ll='ls -lh'
+```bash
+# Make shorthands for common flags
+alias ll="ls -lh"
+
+# Save a lot of typing for common commands
+alias gs="git status"
+alias gc="git commit"
+
+# Save you from mistyping
+alias sl=ls
+
+# Overwrite existing commands for better defaults
+alias mv="mv -i"           # -i prompts before overwrite
+alias mkdir="mkdir -p"     # -p make parent dirs as needed
+alias df="df -h"           # -h prints human readable format
+
+# Alias can be composed
+alias la="ls -A"
+alias lla="la -l"
+
+# To ignore an alias run it prepended with \
+\ls
+# Or disable an alias altogether with unalias
+unalias la
+
+# To get an alias definition just call it with alias
+alias ll
+# Will print ll='ls -lh'
 ```
 
 Aliases have limitations: they cannot take arguments in the middle of a command. For more complex behavior, you should use shell functions instead.
@@ -403,14 +600,29 @@ There are many ways to incorporate AI tooling in the shell. Here are a few examp
 
 **Command generation**: Tools like [`simonw/llm`](https://github.com/simonw/llm) can help generate shell commands from natural language descriptions:
 
-```
-$  "find all python files modified in the last week"find . -name "*.py" -mtime -7 
+```console
+$ llm cmd "find all python files modified in the last week"
+find . -name "*.py" -mtime -7
 ```
 
 **Pipeline integration**: LLMs can be integrated into shell pipelines to process and transform data. They’re particularly useful when you need to extract information from inconsistent formats where regex would be painful:
 
-```
-$  cat Contact: john.doe@example.com User 'alice_smith' logged in at 3pm Posted by: @bob_jones on Twitter Author: Jane Doe (jdoe) Message from mike_wilson yesterday Submitted by user: sarah.connor $  INSTRUCTIONS ="Extract just the username from each line, one per line, nothing else" $  " $INSTRUCTIONS "john.doe alice_smith bob_jones jdoe mike_wilson sarah.connor 
+```console
+$ cat users.txt
+Contact: john.doe@example.com
+User 'alice_smith' logged in at 3pm
+Posted by: @bob_jones on Twitter
+Author: Jane Doe (jdoe)
+Message from mike_wilson yesterday
+Submitted by user: sarah.connor
+$ INSTRUCTIONS="Extract just the username from each line, one per line, nothing else"
+$ llm "$INSTRUCTIONS" < users.txt
+john.doe
+alice_smith
+bob_jones
+jdoe
+mike_wilson
+sarah.connor
 ```
 
 Note how we use `"$INSTRUCTIONS"` (quoted) because the variable contains spaces, and `< users.txt` to redirect the file’s content to stdin.
@@ -444,8 +656,12 @@ Since you might be spending hundreds to thousands of hours in your terminal it p
    A sample output would look like this:
 
    ```
-    -rw-r--r-- 1 user group 1.1M Jan 14 09:53 baz drwxr-xr-x 5 user group 160 Jan 14 09:53 . -rw-r--r-- 1 user group 514 Jan 14 06:42 bar -rw-r--r-- 1 user group 106M Jan 13 12:12 foo drwx------+ 47 user group 1.5K Jan 12 18:08 .. 
-   ```
+    -rw-r--r--   1 user group 1.1M Jan 14 09:53 baz
+    drwxr-xr-x   5 user group  160 Jan 14 09:53 .
+    -rw-r--r--   1 user group  514 Jan 14 06:42 bar
+    -rw-r--r--   1 user group 106M Jan 13 12:12 foo
+    drwx------+ 47 user group 1.5K Jan 12 18:08 ..
+    ```
 3. Process substitution `<(command)` lets you use a command’s output as if it were a file. Use `diff` with process substitution to compare the output of `printenv` and `export`. Why are they different? (Hint: try `diff <(printenv | sort) <(export | sort)`).
 
 ## Environment Variables
@@ -456,9 +672,19 @@ Since you might be spending hundreds to thousands of hours in your terminal it p
 
 1. Say you have a command that fails rarely. In order to debug it you need to capture its output but it can be time consuming to get a failure run. Write a bash script that runs the following script until it fails and captures its standard output and error streams to files and prints everything at the end. Bonus points if you can also report how many runs it took for the script to fail.
 
-   ```
-   #!/usr/bin/env bash n =$((% 100)) if[[$n -eq]]; then echo "Something went wrong"> echo "The error was using magic numbers" exit fi echo "Everything went according to plan"
-   ```
+   ```bash
+    #!/usr/bin/env bash
+
+    n=$(( RANDOM % 100 ))
+
+    if [[ $n -eq 42 ]]; then
+       echo "Something went wrong"
+       >&2 echo "The error was using magic numbers"
+       exit 1
+    fi
+
+    echo "Everything went according to plan"
+    ```
 
 ## Signals and Job Control
 
@@ -493,9 +719,13 @@ Install a Linux virtual machine (or use an already existing one) for these exerc
 1. Go to `~/.ssh/` and check if you have a pair of SSH keys there. If not, generate them with `ssh-keygen -a 100 -t ed25519`. It is recommended that you use a password and use `ssh-agent`, more info [here](https://www.ssh.com/ssh/agent).
 2. Edit `.ssh/config` to have an entry as follows:
 
-   ```
-    Host vm User username_goes_here HostName ip_goes_here IdentityFile ~/.ssh/id_ed25519 LocalForward 9999 localhost:8888 
-   ```
+   ```bash
+    Host vm
+        User username_goes_here
+        HostName ip_goes_here
+        IdentityFile ~/.ssh/id_ed25519
+        LocalForward 9999 localhost:8888
+    ```
 3. Use `ssh-copy-id vm` to copy your ssh key to the server.
 4. Start a webserver in your VM by executing `python -m http.server 8888`. Access the VM webserver by navigating to `http://localhost:9999` in your machine.
 5. Edit your SSH server config by doing `sudo vim /etc/ssh/sshd_config` and disable password authentication by editing the value of `PasswordAuthentication`. Disable root login by editing the value of `PermitRootLogin`. Restart the `ssh` service with `sudo service sshd restart`. Try sshing in again.

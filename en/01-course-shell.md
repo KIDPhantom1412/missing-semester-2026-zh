@@ -52,20 +52,23 @@ Knowing your way around a shell is also very useful to navigate the world of ope
 
 When you launch your terminal, you will see a *prompt* that often looks a little like this:
 
-```
-missing:~$  
+```console
+missing:~$
 ```
 
 This is the main textual interface to the shell. It tells you that you are on the machine `missing` and that your “current working directory”, or where you currently are, is `~` (short for “home”). The `$` tells you that you are not the root user (more on that later). At this prompt you can type a *command*, which will then be interpreted by the shell. The most basic command is to execute a program:
 
-```
-missing:~$  dateFri 10 Jan 2020 11:49:31 AM EST missing:~$  
+```console
+missing:~$ date
+Fri 10 Jan 2020 11:49:31 AM EST
+missing:~$
 ```
 
 Here, we executed the `date` program, which (perhaps unsurprisingly) prints the current date and time. The shell then asks us for another command to execute. We can also execute a command with *arguments*:
 
-```
-missing:~$  echo hello 
+```console
+missing:~$ echo hello
+hello
 ```
 
 In this case, we told the shell to execute the program `echo` with the argument `hello`. The `echo` program simply prints out its arguments. The shell parses the command by splitting it by whitespace, and then runs the program indicated by the first word, supplying each subsequent word as an argument that the program can access. If you want to provide an argument that contains spaces or other special characters (e.g., a directory named “My Photos”), you can either quote the argument with `'` or `"` (`"My Photos"`), or escape just the relevant characters with `\` (`My\ Photos`).
@@ -76,24 +79,31 @@ Perhaps the most important command when you’re starting out is `man`, short fo
 
 After `man`, the most important command to learn is `cd`, or “change directory”. This command is actually built into the shell, and isn’t a separate program (i.e., `which cd` will say “no cd found”). You pass it a path, and that path becomes your current working directory. You’ll also see the working directory reflected in the shell prompt:
 
-```
-missing:~$  cdmissing:/bin$  cdmissing:/$  cdmissing:~$  
+```console
+missing:~$ cd /bin
+missing:/bin$ cd /
+missing:/$ cd ~
+missing:~$
 ```
 
-> Note that the shell comes with auto-completion, so you can often complete paths faster by pressing !
+> Note that the shell comes with auto-completion, so you can often complete paths faster by pressing `<TAB>`!
 
 A lot of commands operate on the current working directory if nothing else is specified. If you’re ever unsure where you are, you can run `pwd` or print the `$PWD` environment variable (with `echo $PWD`), both of which produce the current working directory.
 
 The current working directory also comes in handy in that it allows us to use *relative* paths. All the paths we’ve seen so far have been *absolute* — they start with `/` and give the full set of directories needed to navigate to some location from the root of the file system (`/`). In practice, you’ll more commonly work with relative paths; so called because they are relative to the current working directory. In a relative path (anything *not* starting with `/`), the first path component is looked up in the current working directory, and subsequent components traverse as usual. For example:
 
-```
-missing:~$  cdmissing:/$  cd missing:/bin$  
+```console
+missing:~$ cd /
+missing:/$ cd bin
+missing:/bin$
 ```
 
 There are also two “special” components that exist in every directory: `.` and `..`. `.` is “this directory”, and `..` is “the parent directory”. So:
 
-```
-missing:~$  cdmissing:/$  cd missing:/$  
+```console
+missing:~$ cd /
+missing:/$ cd bin/../bin/../bin/././../bin/..
+missing:/$
 ```
 
 You can usually use absolute and relative paths interchangeably for any command argument, just keep in mind what your current working directory is when using a relative one!
@@ -104,16 +114,21 @@ You can usually use absolute and relative paths interchangeably for any command 
 
 But how does the shell know how to find programs like `date` or `echo`? If the shell is asked to execute a command, it consults an *environment variable* called `$PATH` that lists which directories the shell should search for programs when it is given a command:
 
-```
-missing:~$  echo $PATH/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin missing:~$  echo/bin/echo missing:~$  $PATH/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin 
+```console
+missing:~$ echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+missing:~$ which echo
+/bin/echo
+missing:~$ /bin/echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ```
 
 When we run the `echo` command, the shell sees that it should execute the program `echo`, and then searches through the `:`-separated list of directories in `$PATH` for a file by that name. When it finds it, it runs it (assuming the file is *executable*; more on that later). We can find out which file is executed for a given program name using the `which` program. We can also bypass `$PATH` entirely by giving the *path* to the file we want to execute.
 
 This also gives a clue for how we can determine *all* the programs we’re able to execute in the shell: by listing the contents of all the directories on `$PATH`. We can do this by passing a given directory path to the `ls` program, which lists files:
 
-```
-missing:~$  ls
+```console
+missing:~$ ls /bin
 ```
 
 > Consider installing and using [`eza`](https://eza.rocks/) for a more human-friendly `ls`.
@@ -133,28 +148,28 @@ There’s also `grep pattern file`, which finds lines matching `pattern` in `fil
 
 There are also some very useful tools with a slightly more complicated interface. First among those is `sed`, which is a programmatic file editor. It has its own programming language for making automated edits to files, but the most common use of it is:
 
-```
-missing:~$  sed -i's/pattern/replacement/g'
+```console
+missing:~$ sed -i 's/pattern/replacement/g' file
 ```
 
 This replaces all instances of `pattern` with `replacement` in `file`. The `-i` indicates that we want the substitutions to happen inline (as opposed to leaving `file` unmodified and printing the substituted contents). The `s/` is the way to express in the sed programming language that we want to do a substitution. The `/` separates the pattern from the replacement. And the trailing `/g` indicates that we want to replace *all* occurrences on each line rather than just the first. As with `grep`, `pattern` here is a regular expression, which gives you significant expressive power. Regular expression substitutions also allow `replacement` to refer back to parts of the matched pattern; we’ll see an example of that in a second.
 
 Next, we have `find`, which lets you find files (recursively) that match certain conditions. For example:
 
-```
-missing:~$  -type -name"*.zip" -mtime
+```console
+missing:~$ find ~/Downloads -type f -name "*.zip" -mtime +30
 ```
 
 Finds ZIP files in the download directory that are older than 30 days.
 
-```
-missing:~$  -type -size -exec ls -lh{}\;
+```console
+missing:~$ find ~ -type f -size +100M -exec ls -lh {} \;
 ```
 
 Finds files larger than 100M in your home directory and lists them. Note that `-exec` takes a *command* terminated with a stand-alone `;` (which we need to escape much like a space) where `{}` is replaced with each matching file path by `find`.
 
-```
-missing:~$  . -name"*.py" -exec grep -l "TODO"{}\;
+```console
+missing:~$ find . -name "*.py" -exec grep -l "TODO" {} \;
 ```
 
 Finds any `.py` files with TODO items in them.
@@ -165,16 +180,21 @@ The syntax of `find` can be a little daunting, but hopefully this gives you a se
 
 Next on the docket is `awk`, which, like `sed`, has its own programming language. Where `sed` is built for editing files, `awk` is built for parsing them. By far the most common use of `awk` is for data files with a regular syntax (like CSV files) where you want to extract only certain parts of every record (i.e., line):
 
-```
-missing:~$  awk'{print $2}'
+```console
+missing:~$ awk '{print $2}' file
 ```
 
 Prints the second whitespace-separated column of every line of `file`. If you add `-F,`, it’ll print the second comma-separated column of every line. `awk` can do much more — filtering rows, computing aggregates, and more — see the exercises for a taste.
 
 Putting these tools together, we can do fancy things like:
 
-```
-missing:~$  'journalctl -u sshd -b-1 | grep "Disconnected from"' \ | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\1/' \ | sort | uniq -c \ | sort -nk1,1 | tail -n10 \  | awk '{print $}' | paste -sd, postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root 
+```console
+missing:~$ ssh myserver 'journalctl -u sshd -b-1 | grep "Disconnected from"' \
+  | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\1/' \
+  | sort | uniq -c \
+  | sort -nk1,1 | tail -n10 \
+  | awk '{print $2}' | paste -sd,
+postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root
 ```
 
 This grabs SSH logs from a remote server (we’ll talk more about `ssh` in the next lecture), searches for disconnect messages, extracts the username from each such message, and prints the top 10 usernames comma-separated. All in one command! We’ll leave dissecting each step as an exercise.
@@ -185,7 +205,7 @@ The previous example introduced a new concept: pipes (`|`). These let you string
 
 In fact, most shells implement a full programming language (like bash), just like Python or Ruby. It has variables, conditionals, loops, and functions. When you run commands in your shell, you are really writing a small bit of code that your shell interprets. We won’t teach you all of bash today, but there are some bits you’ll find particularly useful:
 
-First, redirects: `>file` lets you take the standard output of a program and write it to `file` instead of to your terminal. This makes it easier to analyze after the fact. `>>file` will append to `file` rather than overwrite it. There’s also  `which tells the shell to read from file instead of from your keyboard as the standard input to a program.`
+First, redirects: `>file` lets you take the standard output of a program and write it to `file` instead of to your terminal. This makes it easier to analyze after the fact. `>>file` will append to `file` rather than overwrite it. There’s also `<file` which tells the shell to read from `file` instead of from your keyboard as the standard input to a program.
 
 > This is a good time to mention the `tee` program. `tee` will print standard input to standard output (just like `cat`!), but will *also* write it to a file. So `verbose cmd | tee verbose.log | grep CRITICAL` will preserve the full verbose log to a file while keeping your terminal clean!
 
@@ -193,16 +213,39 @@ Next, conditionals: `if command1; then command2; command3; fi` will execute `com
 
 Bash also has two forms of loops, `while` and `for`. `while command1; do command2; command3; done` functions just like the equivalent `if` command, except that it will re-execute the whole thing over and over for as long as `command1` does not error. `for varname in a b c d; do command; done` executes `command` four times, each time with `$varname` set to one of `a`, `b`, `c`, and `d`. Instead of listing the items explicitly, you’ll often use “command substitution”, such as:
 
-```
-for in$(seq ); do
+```bash
+for i in $(seq 1 10); do
 ```
 
-This executes the command `seq 1 10` (which prints the numbers from 1 to 10 inclusive) and then replaces the whole `$()` with that command’s output, giving you a 10-iteration for loop. In older code you’ll sometimes see literal backticks (like `for i in `seq 1 10`; do`) instead of `$()`, but you should strongly prefer the `$()` form as it can be nested.
+This executes the command `seq 1 10` (which prints the numbers from 1 to 10 inclusive) and then replaces the whole `$()` with that command’s output, giving you a 10-iteration for loop. In older code you’ll sometimes see literal backticks (like ``for i in `seq 1 10`; do``) instead of `$()`, but you should strongly prefer the `$()` form as it can be nested.
 
 While you *can* write long shell scripts directly in your prompt, you’ll usually want to write them into a `.sh` file instead. For example, here’s a script that will run a program in a loop until it fails, printing the output only of the failed run, while stressing your CPU in the background (useful to reproduce flaky tests for example):
 
-```
-#!/bin/bash set -euo # Start CPU stress in background --cpu STRESS_PID =$! # Setup log file LOGFILE = "test_runs_$(date).log" echo "Logging to $LOGFILE " # Run tests until one fails RUN = while test > " $LOGFILE "; do echo "Run $RUN  passed"(()) done # Cleanup and report kill $STRESS_PID echo "Test failed on run $RUN " echo"Last 20 lines of output:" tail -n " $LOGFILE " echo"Full log: $LOGFILE "
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Start CPU stress in background
+stress --cpu 8 &
+STRESS_PID=$!
+
+# Setup log file
+LOGFILE="test_runs_$(date +%s).log"
+echo "Logging to $LOGFILE"
+
+# Run tests until one fails
+RUN=1
+while cargo test my_test > "$LOGFILE" 2>&1; do
+    echo "Run $RUN passed"
+    ((RUN++))
+done
+
+# Cleanup and report
+kill $STRESS_PID
+echo "Test failed on run $RUN"
+echo "Last 20 lines of output:"
+tail -n 20 "$LOGFILE"
+echo "Full log: $LOGFILE"
 ```
 
 This has a number of new things in it that I recommend you spend some time diving into, as they’re very useful in crafting useful shell invocations like background jobs (`&`) to run programs concurrently, trickier [shell redirections](https://www.gnu.org/software/bash/manual/html_node/Redirections.html), and [arithmetic expansion](https://www.gnu.org/software/bash/manual/html_node/Arithmetic-Expansion.html).

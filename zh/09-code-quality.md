@@ -33,8 +33,8 @@
 
 除了特定于语言的代码检查器之外，另一个可能派上用场的工具是 [semgrep](https://github.com/semgrep/semgrep)，它是一个“语义 grep”工具，工作在 AST（抽象语法树）层面（而不是像 grep 那样工作在字符层面），并且支持多种语言。你可以用 semgrep 轻松地为你的项目编写自定义检查规则。例如，如果你想阻止 Python 中危险的 `subprocess.Popen(..., shell=True)`，可以用下面的方式找到该代码模式：
 
-```
--l -e"subprocess.Popen(..., shell=True, ...)"
+```bash
+semgrep -l python -e "subprocess.Popen(..., shell=True, ...)"
 ```
 
 # 测试
@@ -119,8 +119,10 @@ Git 提交前[钩子](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)�
 
 如果你使用正则分组 `(...)`，就可以引用匹配中的子部分，用于提取或查找替换。例如，要从 YYYY-MM-DD 风格的日期中只提取月份，可以使用以下 Python 代码：
 
-```
->>> import re>>> re. match(r"\d{4}-(\d{2})-\d{2}","2026-01-14"). group(1) '01'
+```python
+>>> import re
+>>> re.match(r"\d{4}-(\d{2})-\d{2}", "2026-01-14").group(1)
+'01'
 ```
 
 在文本编辑器中，你可以在替换模式里引用捕获组。语法在不同 IDE 之间可能有所不同。例如，在 VS Code 中，你可以使用 `$1`、`$2` 等变量；在 Vim 中，你可以使用 `\1`、`\2` 等来引用分组。
@@ -136,7 +138,9 @@ Git 提交前[钩子](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)�
 对话式 AI 工具可以有效地帮助你生成正则模式。例如，试着用下面的提示词询问你最喜欢的 LLM：
 
 ```
-Write a Python-style regex pattern that matches the requested path from log lines from Nginx. Here is an example log line: 169.254.1.1 - - [09/Jan/2026:21:28:51 +0000] "GET /feed.xml HTTP/2.0" 200 2995 "-" "python-requests/2.32.3" 
+Write a Python-style regex pattern that matches the requested path from log lines from Nginx. Here is an example log line:
+
+169.254.1.1 - - [09/Jan/2026:21:28:51 +0000] "GET /feed.xml HTTP/2.0" 200 2995 "-" "python-requests/2.32.3"
 ```
 
 # 练习

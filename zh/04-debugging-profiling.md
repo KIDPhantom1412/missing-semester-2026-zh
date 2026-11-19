@@ -18,7 +18,7 @@
 
 你通常还会在编程时主动写好日志语句，这样你需要用来调试的数据可能已经在那里了！确实如此，一旦你用打印语句找到并修复了问题，在删除它们之前，通常值得把这些打印语句转换成规范的日志语句。这样，如果将来出现类似的 bug，你无需修改代码就已经拥有了所需的诊断信息。
 
-> **第三方日志**：许多程序支持 `-v` 或 `--verbose` 标志，以便在运行时打印更多信息。这对于发现某个命令为何失败很有用。有些程序甚至允许重复使用该标志以获取更多细节。在调试服务（数据库、Web 服务器等）的问题时，请查看它们的日志——在 Linux 上通常位于 `/var/log/`。使用 `journalctl -u` 查看 systemd 服务的日志。对于第三方库，检查它们是否支持通过环境变量或配置开启调试日志。
+> **第三方日志**：许多程序支持 `-v` 或 `--verbose` 标志，以便在运行时打印更多信息。这对于发现某个命令为何失败很有用。有些程序甚至允许重复使用该标志以获取更多细节。在调试服务（数据库、Web 服务器等）的问题时，请查看它们的日志——在 Linux 上通常位于 `/var/log/`。使用 `journalctl -u <service>` 查看 systemd 服务的日志。对于第三方库，检查它们是否支持通过环境变量或配置开启调试日志。
 
 ## 调试器
 
@@ -58,8 +58,12 @@
 
 基本用法：
 
-```
-# Record a program execution# Replay the recording (opens GDB)
+```bash
+# Record a program execution
+rr record ./my_program
+
+# Replay the recording (opens GDB)
+rr replay
 ```
 
 神奇之处发生在回放期间。由于执行是确定性的，你可以使用**反向调试（reverse debugging）**命令：
@@ -95,8 +99,21 @@
 
 [`strace`](https://www.man7.org/linux/man-pages/man1/strace.1.html) 让你观察程序发出的每一个系统调用：
 
-```
-# Trace all system calls# Trace only file-related calls -e trace =# Follow child processes (important for programs that start other programs) -f # Trace a running process -p # Show timing information -T
+```bash
+# Trace all system calls
+strace ./my_program
+
+# Trace only file-related calls
+strace -e trace=file ./my_program
+
+# Follow child processes (important for programs that start other programs)
+strace -f ./my_program
+
+# Trace a running process
+strace -p <PID>
+
+# Show timing information
+strace -T ./my_program
 ```
 
 > 在 macOS 和 BSD 上，使用 [`dtruss`](https://www.manpagez.com/man/1/dtruss/)（它封装了 `dtrace`）来获得类似的功能：
@@ -106,16 +123,24 @@
 
 [eBPF](https://ebpf.io/)（extended Berkeley Packet Filter，扩展伯克利数据包过滤器）是一项强大的 Linux 技术，允许在内核中运行沙箱化程序。[`bpftrace`](https://github.com/iovisor/bpftrace) 为编写 eBPF 程序提供了高层次的语法。这些是运行在内核中的任意程序，因而具有巨大的表达能力（尽管语法有点像 awk，略显笨拙）。它们最常见的用例是调查正在调用哪些系统调用，包括做聚合（如计数或延迟统计），或内省（甚至基于其过滤）系统调用参数。
 
-```
-# Trace file opens system-wide (prints immediately) sudo -e'tracepoint:syscalls:sys_enter_openat { printf("%s %s\n", comm, str(args->filename)); }'# Count system calls by name (prints summary on Ctrl-C) sudo -e'tracepoint:syscalls:sys_enter_* { @[probe] = count(); }'
+```bash
+# Trace file opens system-wide (prints immediately)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_openat { printf("%s %s\n", comm, str(args->filename)); }'
+
+# Count system calls by name (prints summary on Ctrl-C)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* { @[probe] = count(); }'
 ```
 
 不过，你也可以使用 [`bcc`](https://github.com/iovisor/bcc) 这样的工具链直接用 C 编写 eBPF 程序，它还附带[许多实用工具](https://www.brendangregg.com/blog/2015-09-22/bcc-linux-4.3-tracing.html)，比如用于打印磁盘操作延迟分布的 `biosnoop`，或用于打印所有打开文件的 `opensnoop`。
 
 `strace` 的好处是“开箱即用”非常容易，而当你需要更低的开销、想要追踪内核函数、需要做任何类型的聚合等等时，就应该选用 `bpftrace`。注意 `bpftrace` 必须以 `root` 身份运行，而且它通常监控整个内核，而不仅仅是某个特定进程。要针对特定程序，你可以按命令名或 PID 进行过滤：
 
-```
-# Filter by command name (prints summary on Ctrl-C) sudo -e'tracepoint:syscalls:sys_enter_* /comm == "bash"/ { @[probe] = count(); }'# Trace a specific command from startup using -c (cpid = child PID) sudo -e'tracepoint:syscalls:sys_enter_* /pid == cpid/ { @[probe] = count(); }' -c'ls -la'
+```bash
+# Filter by command name (prints summary on Ctrl-C)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* /comm == "bash"/ { @[probe] = count(); }'
+
+# Trace a specific command from startup using -c (cpid = child PID)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* /pid == cpid/ { @[probe] = count(); }' -c 'ls -la'
 ```
 
 `-c` 标志会运行指定的命令并将 `cpid` 设置为该命令的 PID，这对于从程序启动那一刻起开始追踪非常有用。当被追踪的命令退出时，bpftrace 会打印聚合结果。
@@ -124,8 +149,12 @@
 
 对于网络问题，[`tcpdump`](https://www.man7.org/linux/man-pages/man1/tcpdump.1.html) 和 [Wireshark](https://www.wireshark.org/) 让你捕获并分析网络数据包：
 
-```
-# Capture packets on port 80 sudo -i # Capture and save to file for Wireshark analysis sudo -i -w
+```bash
+# Capture packets on port 80
+sudo tcpdump -i any port 80
+
+# Capture and save to file for Wireshark analysis
+sudo tcpdump -i any -w capture.pcap
 ```
 
 对于 HTTPS 流量，加密使得 tcpdump 不那么好用。像 [mitmproxy](https://mitmproxy.org/) 这样的工具可以作为拦截代理来检查加密流量。浏览器开发者工具（Network/网络 标签页）通常是调试来自 Web 应用的 HTTPS 请求最简单的方式——它们会显示解密后的请求/响应数据、头部和时序信息。
@@ -143,8 +172,10 @@
 * 返回后使用（use-after-return）
 * 内存泄漏
 
-```
-# Compile with AddressSanitizer -fsanitize = -g -o
+```bash
+# Compile with AddressSanitizer
+gcc -fsanitize=address -g program.c -o program
+./program
 ```
 
 有多种实用的检测器：
@@ -159,8 +190,8 @@
 
 [Valgrind](https://valgrind.org/) 则是把你的程序运行在一个类似虚拟机的环境中来检测内存错误。它比检测器慢，但不需要重新编译：
 
-```
---leak-check =
+```bash
+valgrind --leak-check=full ./my_program
 ```
 
 在以下情况下使用 Valgrind：
@@ -207,8 +238,11 @@ Valgrind 实际上是一个非常强大的受控执行环境，等我们讲到�
 * **User** - CPU 花在运行用户代码上的时间
 * **Sys** - CPU 花在运行内核代码上的时间
 
-```
-$ time 
+```bash
+$ time curl https://missing.csail.mit.edu &> /dev/null
+real	0m0.272s
+user	0m0.079s
+sys	    0m0.028s
 ```
 
 这里请求花了将近 300 毫秒（真实时间），但 CPU 时间只有 107 毫秒（user + sys）。其余时间都在等待网络。
@@ -217,7 +251,7 @@ $ time
 
 有时，分析程序性能的第一步是了解它的实际资源消耗是多少。程序在资源受限时常常运行缓慢。
 
-* **通用监控**：[`htop`](https://htop.dev/) 是 `top` 的改进版本，它展示当前正在运行的进程的各种统计信息。实用快捷键： 对进程排序，`t` 显示树状层级，`h` 切换线程显示。还有 [`btop`](https://github.com/aristocratos/btop)，它监控的东西*多*得多。
+* **通用监控**：[`htop`](https://htop.dev/) 是 `top` 的改进版本，它展示当前正在运行的进程的各种统计信息。实用快捷键：`<F6>` 对进程排序，`t` 显示树状层级，`h` 切换线程显示。还有 [`btop`](https://github.com/aristocratos/btop)，它监控的东西*多*得多。
 * **I/O 操作**：[`iotop`](https://www.man7.org/linux/man-pages/man8/iotop.8.html) 显示实时的 I/O 使用信息。
 * **内存使用**：[`free`](https://www.man7.org/linux/man-pages/man1/free.1.html) 显示空闲和已用内存的总量。
 * **打开的文件**：[`lsof`](https://www.man7.org/linux/man-pages/man8/lsof.8.html) 列出进程所打开文件的相关信息。适合用来查看哪个进程打开了某个特定文件。
@@ -232,8 +266,9 @@ $ time
 
 **用 gnuplot 快速绘图**：对于简单的命令行绘图，[`gnuplot`](http://www.gnuplot.info/) 可以直接从数据文件生成图表：
 
-```
-# Plot a simple CSV with timestamp,value -e"set datafile separator ','; plot 'latency.csv' using 1:2 with lines"
+```bash
+# Plot a simple CSV with timestamp,value
+gnuplot -e "set datafile separator ','; plot 'latency.csv' using 1:2 with lines"
 ```
 
 **用 matplotlib 和 ggplot2 进行迭代式探索**：对于更深入的分析，Python 的 [`matplotlib`](https://matplotlib.org/) 和 R 的 [`ggplot2`](https://ggplot2.tidyverse.org/) 支持迭代式探索。与一次性绘图不同，这些工具让你可以快速对数据进行切片和转换以验证假设。ggplot2 的分面图（facet plots）尤其强大——你可以按类别把一个数据集拆分到多个子图中（例如，按端点或一天中的时段对请求延迟进行分面），从而揭示原本会被掩盖的模式。
@@ -259,18 +294,35 @@ $ time
 
 `perf stat` 让你快速了解时间花在了哪里：
 
-```
-$ stat for'./slow_program'# 0.998 CPUs utilized# 3.738 /sec# 0.000 /sec# 48.587 /sec# 3.845 GHz# 0.80 insn per cycle# 384.532 M/sec# 1.00% of all branches
+```bash
+$ perf stat ./slow_program
+
+ Performance counter stats for './slow_program':
+
+         3,210.45 msec task-clock                #    0.998 CPUs utilized
+               12      context-switches          #    3.738 /sec
+                0      cpu-migrations            #    0.000 /sec
+              156      page-faults               #   48.587 /sec
+   12,345,678,901      cycles                    #    3.845 GHz
+    9,876,543,210      instructions              #    0.80  insn per cycle
+    1,234,567,890      branches                  #  384.532 M/sec
+       12,345,678      branch-misses             #    1.00% of all branches
 ```
 
 对真实世界程序的性能分析输出会包含大量信息。人类是视觉动物，很不擅长阅读大量数字。[火焰图（flame graphs）](https://www.brendangregg.com/flamegraphs.html)是一种能让性能分析数据更容易理解的可视化方式。
 
 火焰图在 Y 轴上显示函数调用的层级结构，X 轴上占用的宽度与所耗时间成正比。它们是交互式的——你可以点击以放大到程序的特定部分。
 
+[![FlameGraph](https://www.brendangregg.com/FlameGraphs/cpu-bash-flamegraph.svg)](https://www.brendangregg.com/FlameGraphs/cpu-bash-flamegraph.svg)
+
 要从 `perf` 数据生成火焰图：
 
-```
-# Record profile -g# Generate flame graph (requires flamegraph scripts)>
+```bash
+# Record profile
+perf record -g ./my_program
+
+# Generate flame graph (requires flamegraph scripts)
+perf script | stackcollapse-perf.pl | flamegraph.pl > flamegraph.svg
 ```
 
 > 考虑使用 [Speedscope](https://www.speedscope.app/) 作为基于 Web 的交互式火焰图查看器，或使用 [Perfetto](https://perfetto.dev/) 进行全面的系统级分析。
@@ -279,8 +331,13 @@ $ stat for'./slow_program'# 0.998 CPUs utilized# 3.738 /sec# 0.000 /sec# 48.587 
 
 [`callgrind`](https://valgrind.org/docs/manual/cl-manual.html) 是一个性能分析工具，它记录你程序的调用历史和指令计数。与采样式分析器不同，它提供精确的调用次数，并能显示调用方与被调用方之间的关系：
 
-```
-# Run with callgrind --tool =# Analyze with callgrind_annotate (text) or kcachegrind (GUI)
+```bash
+# Run with callgrind
+valgrind --tool=callgrind ./my_program
+
+# Analyze with callgrind_annotate (text) or kcachegrind (GUI)
+callgrind_annotate callgrind.out.<pid>
+kcachegrind callgrind.out.<pid>
 ```
 
 Callgrind 比采样式分析器慢，但能提供精确的调用次数，而且如果你需要相关信息，它还可以选择性地模拟缓存行为（使用 `--cache-sim=yes`）。
@@ -295,8 +352,9 @@ Callgrind 比采样式分析器慢，但能提供精确的调用次数，而且�
 
 [`massif`](https://valgrind.org/docs/manual/ms-manual.html) 对堆内存使用情况进行性能分析：
 
-```
---tool =
+```bash
+valgrind --tool=massif ./my_program
+ms_print massif.out.<pid>
 ```
 
 它会向你展示堆使用量随时间的变化，帮助识别内存泄漏和过度分配。
@@ -307,8 +365,19 @@ Callgrind 比采样式分析器慢，但能提供精确的调用次数，而且�
 
 当你需要比较不同实现或工具的性能时，[`hyperfine`](https://github.com/sharkdp/hyperfine) 是对命令行程序进行基准测试（benchmarking）的绝佳工具：
 
-```
-$ --warmup'fd -e jpg''find . -iname "*.jpg"'#1: fd -e jpg()[()#2: find . -iname "*.jpg"()[()'fd -e jpg' times 'find . -iname "*.jpg"'
+```bash
+$ hyperfine --warmup 3 'fd -e jpg' 'find . -iname "*.jpg"'
+Benchmark #1: fd -e jpg
+  Time (mean ± σ):      51.4 ms ±   2.9 ms    [User: 121.0 ms, System: 160.5 ms]
+  Range (min … max):    44.2 ms …  60.1 ms    56 runs
+
+Benchmark #2: find . -iname "*.jpg"
+  Time (mean ± σ):      1.126 s ±  0.101 s    [User: 141.1 ms, System: 956.1 ms]
+  Range (min … max):    0.975 s …  1.287 s    10 runs
+
+Summary
+  'fd -e jpg' ran
+   21.89 ± 2.33 times faster than 'find . -iname "*.jpg"'
 ```
 
 > 对于 Web 开发，浏览器开发者工具自带出色的性能分析器。参见 [Firefox Profiler](https://profiler.firefox.com/docs/) 和 [Chrome DevTools](https://developers.google.com/web/tools/chrome-devtools/rendering-tools) 的文档。
@@ -320,21 +389,100 @@ $ --warmup'fd -e jpg''find . -iname "*.jpg"'#1: fd -e jpg()[()#2: find . -iname 
 1. **调试一个排序算法**：以下伪代码实现了归并排序（merge sort），但包含一个 bug。用你选择的语言实现它，然后使用调试器（gdb、lldb、pdb 或你 IDE 的调试器）找到并修复这个 bug。
 
    ```
-   function merge_sort(arr): if length(arr) <= 1: return arr mid = length(arr) / 2 left = merge_sort(arr[0..mid]) right = merge_sort(arr[mid..end]) return merge(left, right) function merge(left, right): result = [] i = 0, j = 0 while i < length(left) AND j < length(right): if left[i] <= right[j]: append result, left[i] i = i + 1 else: append result, right[i] j = j + 1 append remaining elements from left and right return result 
+   function merge_sort(arr):
+       if length(arr) <= 1:
+           return arr
+       mid = length(arr) / 2
+       left = merge_sort(arr[0..mid])
+       right = merge_sort(arr[mid..end])
+       return merge(left, right)
+
+   function merge(left, right):
+       result = []
+       i = 0, j = 0
+       while i < length(left) AND j < length(right):
+           if left[i] <= right[j]:
+               append result, left[i]
+               i = i + 1
+           else:
+               append result, right[i]
+               j = j + 1
+       append remaining elements from left and right
+       return result
    ```
 
    测试向量：`merge_sort([3, 1, 4, 1, 5, 9, 2, 6])` 应该返回 `[1, 1, 2, 3, 4, 5, 6, 9]`。使用断点并单步跟踪 merge 函数，找出错误的元素是在哪里被选中的。
 2. 安装 [`rr`](https://rr-project.org/) 并使用反向调试来找出一个内存破坏 bug。将以下程序保存为 `corruption.c`：
 
-   ```
-   #include  typedef struct{int id; int scores[3];} Student; Student students[2]; void init(){students[0]. id = 1001; students[0]. scores[0] = 85; students[0]. scores[1] = 92; students[0]. scores[2] = 78; students[1]. id = 1002; students[1]. scores[0] = 90; students[1]. scores[1] = 88; students[1]. scores[2] = 95;} void curve_scores(int student_idx, int curve){for(int i = 0; i< 4; i ++){students[student_idx]. scores[i] += curve;}} int main(){init(); printf("=== Initial state === \n "); printf("Student 0: id=%d \n ", students[0]. id); printf("Student 1: id=%d \n ", students[1]. id); curve_scores(0, 5); printf(" \n === After curving === \n "); printf("Student 0: id=%d \n ", students[0]. id); printf("Student 1: id=%d \n ", students[1]. id); if(students[1]. id!= 1002){printf(" \nERROR: Student 1's ID was corrupted! Expected 1002, got %d \n ", students[1]. id); return 1;} return 0;}
+   ```c
+   #include <stdio.h>
+
+   typedef struct {
+       int id;
+       int scores[3];
+   } Student;
+
+   Student students[2];
+
+   void init() {
+       students[0].id = 1001;
+       students[0].scores[0] = 85;
+       students[0].scores[1] = 92;
+       students[0].scores[2] = 78;
+
+       students[1].id = 1002;
+       students[1].scores[0] = 90;
+       students[1].scores[1] = 88;
+       students[1].scores[2] = 95;
+   }
+
+   void curve_scores(int student_idx, int curve) {
+       for (int i = 0; i < 4; i++) {
+           students[student_idx].scores[i] += curve;
+       }
+   }
+
+   int main() {
+       init();
+       printf("=== Initial state ===\n");
+       printf("Student 0: id=%d\n", students[0].id);
+       printf("Student 1: id=%d\n", students[1].id);
+
+       curve_scores(0, 5);
+
+       printf("\n=== After curving ===\n");
+       printf("Student 0: id=%d\n", students[0].id);
+       printf("Student 1: id=%d\n", students[1].id);
+
+       if (students[1].id != 1002) {
+           printf("\nERROR: Student 1's ID was corrupted! Expected 1002, got %d\n",
+                  students[1].id);
+           return 1;
+       }
+       return 0;
+   }
    ```
 
    用 `gcc -g corruption.c -o corruption` 编译并运行它。学生 1 的 ID 被破坏了，但破坏发生在一个只操作学生 0 的函数中。使用 `rr record ./corruption` 和 `rr replay` 找出罪魁祸首。在 `students[1].id` 上设置一个观察点，并在破坏发生后使用 `reverse-continue`，准确找出是哪一行代码覆写了它。
 3. 用 AddressSanitizer 调试一个内存错误。将以下内容保存为 `uaf.c`：
 
-   ```
-   #include  #include  #include  int main(){char* greeting = malloc(32); strcpy(greeting,"Hello, world!"); printf("%s \n ", greeting); free(greeting); greeting[0] = 'J'; printf("%s \n ", greeting); return 0;}
+   ```c
+   #include <stdlib.h>
+   #include <string.h>
+   #include <stdio.h>
+
+   int main() {
+       char *greeting = malloc(32);
+       strcpy(greeting, "Hello, world!");
+       printf("%s\n", greeting);
+
+       free(greeting);
+
+       greeting[0] = 'J';
+       printf("%s\n", greeting);
+
+       return 0;
+   }
    ```
 
    首先在不使用检测器的情况下编译并运行：`gcc uaf.c -o uaf && ./uaf`。它可能看起来工作正常。现在用 AddressSanitizer 编译：`gcc -fsanitize=address -g uaf.c -o uaf && ./uaf`。阅读错误报告。ASan 发现了什么 bug？修复它所指出的问题。
@@ -346,14 +494,34 @@ $ --warmup'fd -e jpg''find . -iname "*.jpg"'#1: fd -e jpg()[()#2: find . -iname 
 1. 用 `perf stat` 获取你选择的某个程序的基本性能统计。各个计数器都是什么意思？
 2. 用 `perf record` 做性能分析。将以下内容保存为 `slow.c`：
 
-   ```
-   #include  #include  double slow_computation(int n){double result = 0; for(int i = 0; i< n; i ++){for(int j = 0; j< 1000; j ++){result += sin(i* j)* cos(i + j);}} return result;} int main(){double r = 0; for(int i = 0; i< 100; i ++){r += slow_computation(1000);} printf("Result: %f \n ", r); return 0;}
+   ```c
+   #include <math.h>
+   #include <stdio.h>
+
+   double slow_computation(int n) {
+       double result = 0;
+       for (int i = 0; i < n; i++) {
+           for (int j = 0; j < 1000; j++) {
+               result += sin(i * j) * cos(i + j);
+           }
+       }
+       return result;
+   }
+
+   int main() {
+       double r = 0;
+       for (int i = 0; i < 100; i++) {
+           r += slow_computation(1000);
+       }
+       printf("Result: %f\n", r);
+       return 0;
+   }
    ```
 
    带调试符号编译：`gcc -g -O2 slow.c -o slow -lm`。运行 `perf record -g ./slow`，然后用 `perf report` 查看时间花在哪里。试着用 flamegraph 脚本生成一个火焰图。
 3. 用 `hyperfine` 对同一任务的两种不同实现进行基准测试（例如 `find` 与 `fd`、`grep` 与 `ripgrep`，或者你自己代码的两个版本）。
 4. 在运行一个资源密集型程序时用 `htop` 监控你的系统。试着用 `taskset` 限制一个进程可以使用哪些 CPU：`taskset --cpu-list 0,2 stress -c 3`。为什么 `stress` 没有用到三个 CPU？
-5. 一个常见的问题是你想监听的端口已经被另一个进程占用。学会如何发现该进程：首先执行 `python -m http.server 4444`，在端口 4444 上启动一个最小的 Web 服务器。在另一个终端里运行 `ss -tlnp | grep 4444` 找到该进程。用 `kill` 终止它。
+5. 一个常见的问题是你想监听的端口已经被另一个进程占用。学会如何发现该进程：首先执行 `python -m http.server 4444`，在端口 4444 上启动一个最小的 Web 服务器。在另一个终端里运行 `ss -tlnp | grep 4444` 找到该进程。用 `kill <PID>` 终止它。
 
 ---
 

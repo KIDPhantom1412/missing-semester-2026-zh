@@ -9,13 +9,26 @@
 在大多数编程语言中，编写一个函数大致是这样的：
 
 ```
-def add(x: int, y: int) -> int: return x + y 
+def add(x: int, y: int) -> int:
+    return x + y
 ```
 
 这里我们可以显式地看到程序的输入和输出。相比之下，shell 脚本乍看起来可能很不一样。
 
-```
-#!/usr/bin/env bash if[[-f $1]]; then echo "Target file already exists" exit else if $DEBUG; then grep 'error' tee $1 else grep 'error'> $1 fi exit fi
+```shell
+#!/usr/bin/env bash
+
+if [[ -f $1 ]]; then
+    echo "Target file already exists"
+    exit 1
+else
+    if $DEBUG; then
+        grep 'error' - | tee $1
+    else
+        grep 'error' - > $1
+    fi
+    exit 0
+fi
 ```
 
 要正确理解这样的脚本里发生了什么，我们首先需要介绍几个在 shell 程序之间或与 shell 环境通信时经常出现的概念：
@@ -40,16 +53,21 @@ shell 程序在执行时会收到一个参数列表。在 shell 中参数就是�
 
 CLI 程序中另一个常见约定是接受同一类型的可变数量的参数。以这种方式给出参数时，命令会对其中每个参数执行相同的操作。
 
-```
-mkdir mkdir # is equivalent to mkdir 
+```shell
+mkdir src
+mkdir docs
+# is equivalent to
+mkdir src docs
 ```
 
 这种语法糖起初看似没有必要，但与*通配符展开（globbing）*结合起来时会变得非常强大。通配符展开（globbing）或称 glob 是一些特殊模式，shell 会在调用程序之前先对它们进行展开。
 
 假设我们想删除当前文件夹中所有 .py 文件（不递归）。根据上一讲所学，我们可以通过运行下面的命令来实现
 
-```
-for in$(ls grep -P'\.py$'); do rm " $file " done
+```shell
+for file in $(ls | grep -P '\.py$'); do
+    rm "$file"
+done
 ```
 
 但我们只需 `rm *.py` 就能取代它！
@@ -60,8 +78,22 @@ for in$(ls grep -P'\.py$'); do rm " $file " done
 
 在实践中，最好通过具体的例子来理解 glob。
 
-```
-touch {} # Will expand to touch {} # Will expand to cp{} # Will expand to cp # Globbing techniques can also be combined mv*{}# Will move all *.py and *.sh files
+```shell
+touch folder/{a,b,c}.py
+# Will expand to
+touch folder/a.py folder/b.py folder/c.py
+
+convert image.{png,jpg}
+# Will expand to
+convert image.png image.jpg
+
+cp /path/to/project/{setup,build,deploy}.sh /newpath
+# Will expand to
+cp /path/to/project/setup.sh /path/to/project/build.sh /path/to/project/deploy.sh /newpath
+
+# Globbing techniques can also be combined
+mv *{.py,.sh} folder
+# Will move all *.py and *.sh files
 ```
 
 > 有些 shell（例如 zsh）支持更高级的通配符展开形式，例如 `**`，它会展开为包含递归路径。因此 `rm **/*.py` 会递归删除所有 .py 文件。
@@ -70,8 +102,8 @@ touch {} # Will expand to touch {} # Will expand to cp{} # Will expand to cp # G
 
 每当我们执行像下面这样的程序管道（pipeline）时
 
-```
-cat grep -P'\d+' uniq -c
+```shell
+cat myfile | grep -P '\d+' | uniq -c
 ```
 
 我们会看到 `grep` 程序同时在与 `cat` 和 `uniq` 程序通信。
@@ -80,34 +112,66 @@ cat grep -P'\d+' uniq -c
 
 我们可以演示这种并发性，管道中的所有命令都会立即启动：
 
-```
-$  (sleep && cat ) grep -P '^\d$' sort uniq[1] 12345 $  grep -P'(sleep|cat|grep|sort|uniq)' 32930 pts/1 00:00:00 sleep 32931 pts/1 00:00:00 grep 32932 pts/1 00:00:00 sort 32933 pts/1 00:00:00 uniq 32948 pts/1 00:00:00 grep 
+```console
+$ (sleep 15 && cat numbers.txt) | grep -P '^\d$' | sort | uniq  &
+[1] 12345
+$ ps | grep -P '(sleep|cat|grep|sort|uniq)'
+  32930 pts/1    00:00:00 sleep
+  32931 pts/1    00:00:00 grep
+  32932 pts/1    00:00:00 sort
+  32933 pts/1    00:00:00 uniq
+  32948 pts/1    00:00:00 grep
 ```
 
 可以看到除 `cat` 之外的所有进程都立刻在运行。shell 会生成所有进程并在其中任何一个完成之前连接好它们的流。`cat` 要等到 sleep 结束后才会启动，`cat` 的输出会被发送给 grep，依此类推。
 
 每个程序都有一个输入流，标记为 stdin（standard input，标准输入）。使用管道时，stdin 会被自动连接。在脚本中，许多程序接受 `-` 作为文件名，表示“从 stdin 读取”：
 
-```
-# These are equivalent when data comes from a pipe echo "hello" grep "hello" echo "hello" grep "hello"
+```shell
+# These are equivalent when data comes from a pipe
+echo "hello" | grep "hello"
+echo "hello" | grep "hello" -
 ```
 
 类似地，每个程序有两个输出流：stdout 和 stderr。标准输出（stdout）是最常用到的那一个，它用于把程序的输出通过管道传给管道中的下一个命令。标准错误（stderr）是一个备用流，供程序报告警告和其他类型的问题，这样这些输出就不会被链条中的下一个命令解析。
 
-```
-$  lsls: cannot access '/nonexistent': No such file or directory $  ls grep "pattern"ls: cannot access '/nonexistent': No such file or directory #  $  ls #  
+```console
+$ ls /nonexistent
+ls: cannot access '/nonexistent': No such file or directory
+$ ls /nonexistent | grep "pattern"
+ls: cannot access '/nonexistent': No such file or directory
+# The error message still appears because stderr is not piped
+$ ls /nonexistent 2>/dev/null
+# No output - stderr was redirected to /dev/null
 ```
 
 shell 提供了重定向（redirect）这些流的语法。下面是一些说明性的例子。
 
-```
-# Redirect stdout to a file (overwrite) echo "hello"># Redirect stdout to a file (append) echo "world">> # Redirect stderr to a file ls # Redirect both stdout and stderr to the same file ls # Redirect stdin from a file grep "pattern"# Discard output by redirecting to /dev/null>
+```shell
+# Redirect stdout to a file (overwrite)
+echo "hello" > output.txt
+
+# Redirect stdout to a file (append)
+echo "world" >> output.txt
+
+# Redirect stderr to a file
+ls foobar 2> errors.txt
+
+# Redirect both stdout and stderr to the same file
+ls foobar &> all_output.txt
+
+# Redirect stdin from a file
+grep "pattern" < input.txt
+
+# Discard output by redirecting to /dev/null
+cmd > /dev/null 2>&1
 ```
 
 另一个体现 Unix 哲学的强大工具是 [`fzf`](https://github.com/junegunn/fzf)，一个模糊查找器（fuzzy finder）。它从 stdin 读取各行，并提供一个交互式界面来筛选和选择：
 
-```
-$  ls $  cat
+```console
+$ ls | fzf
+$ cat ~/.bash_history | fzf
 ```
 
 `fzf` 可以与许多 shell 操作集成。在讨论 shell 定制时，我们会看到它的更多用法。
@@ -116,16 +180,22 @@ $  ls $  cat
 
 在 bash 中给变量赋值使用 `foo=bar` 这样的语法，然后用 `$foo` 语法访问变量的值。注意 `foo = bar` 是无效语法，因为 shell 会把它解析为以参数 `['=', 'bar']` 调用程序 `foo`。在 shell 脚本中，空格字符的作用是执行参数分割（argument splitting）。这种行为可能令人困惑、也不容易习惯，请牢记这一点。
 
-shell 变量没有类型，它们全都是字符串。注意在 shell 中书写字符串表达式时，单引号和双引号不可互换。用 `'` 包围的字符串是字面字符串（literal string），不会展开变量、执行命令替换或处理转义序列，而用 `\"` 包围的字符串则会。
+shell 变量没有类型，它们全都是字符串。注意在 shell 中书写字符串表达式时，单引号和双引号不可互换。用 `'` 包围的字符串是字面字符串（literal string），不会展开变量、执行命令替换或处理转义序列，而用 `"` 包围的字符串则会。
 
-```
-foo = echo " $foo " # prints bar echo '$foo' # prints $foo
+```shell
+foo=bar
+echo "$foo"
+# prints bar
+echo '$foo'
+# prints $foo
 ```
 
 要把命令的输出捕获到变量中，我们使用*命令替换（command substitution）*。当我们执行
 
-```
-files =$(ls) echo " $files " grep echo " $files " grep".py"
+```shell
+files=$(ls)
+echo "$files" | grep README
+echo "$files" | grep ".py"
 ```
 
 时，ls 的输出（具体说是 stdout）被放进变量 `$files`，我们可以在之后访问它。`$files` 变量的内容确实包含 ls 输出中的换行符，`grep` 这类程序正是凭这一点知道要对每一项独立操作。
@@ -136,14 +206,18 @@ files =$(ls) echo " $files " grep echo " $files " grep".py"
 
 > 环境变量按惯例全部用大写字母书写（例如 `HOME`、`PATH`、`DEBUG`）。这是一种约定，而不是技术要求，但遵循它有助于把环境变量与通常为小写的局部 shell 变量区分开来。
 
-```
-TZ = date # prints the current time in Tokyo echo $TZ# this will be empty, since TZ was only set for the child command
+```shell
+TZ=Asia/Tokyo date  # prints the current time in Tokyo
+echo $TZ  # this will be empty, since TZ was only set for the child command
 ```
 
 另外，我们也可以使用 `export` 内建（built-in）命令，它会修改我们当前的环境，从而让所有子进程都继承该变量：
 
-```
-export DEBUG =# All programs from this point onwards will have DEBUG=1 in their environment -c 'echo $DEBUG' # prints 1
+```shell
+export DEBUG=1
+# All programs from this point onwards will have DEBUG=1 in their environment
+bash -c 'echo $DEBUG'
+# prints 1
 ```
 
 要删除一个变量，使用 `unset` 内建命令，例如 `unset DEBUG`。
@@ -158,22 +232,42 @@ export DEBUG =# All programs from this point onwards will have DEBUG=1 in their 
 
 shell 有布尔运算符 `&&` 和 `||`，分别执行 AND 和 OR 运算。与普通编程语言中的那些不同，shell 中的这些运算符作用于程序的返回码。两者都是[短路求值（short-circuiting）](https://en.wikipedia.org/wiki/Short-circuit_evaluation)运算符。这意味着可以用它们根据之前命令的成功或失败来有条件地运行命令，而成功与否由返回码是否为零来判定。一些例子：
 
-```
-# echo will only run if grep succeeds (finds a match) grep -q "pattern" && echo "Pattern found"# echo will only run if grep fails (no match) grep -q "pattern" || echo "Pattern not found" # true is a shell program that always succeeds true && echo "This will always print" # and false is a shell program that always fails false || echo "This will always print"
+```shell
+# echo will only run if grep succeeds (finds a match)
+grep -q "pattern" file.txt && echo "Pattern found"
+
+# echo will only run if grep fails (no match)
+grep -q "pattern" file.txt || echo "Pattern not found"
+
+# true is a shell program that always succeeds
+true && echo "This will always print"
+
+# and false is a shell program that always fails
+false || echo "This will always print"
 ```
 
 同样的原则适用于 `if` 和 `while` 语句，它们都使用返回码来做判断：
 
-```
-# if uses the return code of the condition command (0 = true, nonzero = false) if grep -q "pattern"; then echo "Found" fi # while loops continue as long as the command returns 0 while read ; do echo " $line " done
+```shell
+# if uses the return code of the condition command (0 = true, nonzero = false)
+if grep -q "pattern" file.txt; then
+    echo "Found"
+fi
+
+# while loops continue as long as the command returns 0
+while read line; do
+    echo "$line"
+done < file.txt
 ```
 
 ## 信号
 
 在某些情况下，你需要在程序执行过程中中断它，例如某个命令花了太长时间才完成。中断程序最简单的方式是按下 `Ctrl-C`，命令很可能会停止。但这究竟是怎么做到的？为什么它有时无法停止进程？
 
-```
-$  sleep ^C $  
+```console
+$ sleep 100
+^C
+$
 ```
 
 > 注意，这里 `^C` 是 `Ctrl-C` 在终端中键入时的显示方式。
@@ -189,17 +283,33 @@ $  sleep ^C $
 
 在我们的例子中，键入 `Ctrl-C` 会让 shell 向进程传递一个 `SIGINT` 信号。下面是一个 Python 程序的最小示例，它捕获 `SIGINT` 并忽略它，不再停止。要杀掉这个程序，我们现在可以改用 `SIGQUIT` 信号，即键入 `Ctrl-\`。
 
-```
-#!/usr/bin/env python import signal, time def handler(signum, time): print(" \nI got a SIGINT, but I am not stopping") signal. signal(signal. SIGINT, handler) i = 0 while True: time. sleep(. 1) print(" \r{}". format(i), end = "") i += 1
+```python
+#!/usr/bin/env python
+import signal, time
+
+def handler(signum, time):
+    print("\nI got a SIGINT, but I am not stopping")
+
+signal.signal(signal.SIGINT, handler)
+i = 0
+while True:
+    time.sleep(.1)
+    print("\r{}".format(i), end="")
+    i += 1
 ```
 
 下面是我们向该程序发送两次 `SIGINT`、随后发送 `SIGQUIT` 时发生的情况。注意 `^` 是 `Ctrl` 在终端中键入时的显示方式。
 
-```
-$  24^C I got a SIGINT, but I am not stopping 26^C I got a SIGINT, but I am not stopping 30^\[1] 39913 quit python sigint.py 
+```console
+$ python sigint.py
+24^C
+I got a SIGINT, but I am not stopping
+26^C
+I got a SIGINT, but I am not stopping
+30^\[1]    39913 quit       python sigint.py
 ```
 
-虽然 `SIGINT` 和 `SIGQUIT` 通常都与终端相关的请求联系在一起，但要请求进程优雅地退出，更通用的信号是 `SIGTERM` 信号。要发送这个信号，我们可以使用 [`kill`](https://www.man7.org/linux/man-pages/man1/kill.1.html) 命令，语法为 `kill -TERM`。
+虽然 `SIGINT` 和 `SIGQUIT` 通常都与终端相关的请求联系在一起，但要请求进程优雅地退出，更通用的信号是 `SIGTERM` 信号。要发送这个信号，我们可以使用 [`kill`](https://www.man7.org/linux/man-pages/man1/kill.1.html) 命令，语法为 `kill -TERM <PID>`。
 
 信号除了杀掉进程之外还能做其他事情。例如，`SIGSTOP` 会暂停一个进程。在终端中键入 `Ctrl-Z` 会让 shell 发送一个 `SIGTSTP` 信号，它是 Terminal Stop 的缩写（即终端版的 `SIGSTOP`）。
 
@@ -214,7 +324,28 @@ $  24^C I got a SIGINT, but I am not stopping 26^C I got a SIGINT, but I am not 
 下面是一个示例会话，展示其中一些概念。
 
 ```
-$ sleep 1000 ^Z [1] + 18653 suspended sleep 1000 $ nohup sleep 2000 & [2] 18745 appending output to nohup.out $ jobs [1] + suspended sleep 1000 [2] - running nohup sleep 2000 $ kill -SIGHUP %1 [1] + 18653 hangup sleep 1000 $ kill -SIGHUP %2 # nohup protects from SIGHUP $ jobs [2] + running nohup sleep 2000 $ kill %2 [2] + 18745 terminated nohup sleep 2000 
+$ sleep 1000
+^Z
+[1]  + 18653 suspended  sleep 1000
+
+$ nohup sleep 2000 &
+[2] 18745
+appending output to nohup.out
+
+$ jobs
+[1]  + suspended  sleep 1000
+[2]  - running    nohup sleep 2000
+
+$ kill -SIGHUP %1
+[1]  + 18653 hangup     sleep 1000
+
+$ kill -SIGHUP %2   # nohup protects from SIGHUP
+
+$ jobs
+[2]  + running    nohup sleep 2000
+
+$ kill %2
+[2]  + 18745 terminated  nohup sleep 2000
 ```
 
 一个特殊的信号是 `SIGKILL`，因为它无法被进程捕获，且总会立即终止进程。不过它可能有不良副作用，比如留下孤立的子进程。
@@ -223,24 +354,35 @@ $ sleep 1000 ^Z [1] + 18653 suspended sleep 1000 $ nohup sleep 2000 & [2] 18745 
 
 在 shell 脚本中，你可以使用 `trap` 内建命令在收到信号时执行命令。这对清理操作很有用：
 
-```
-#!/usr/bin/env bash(){echo"Cleaning up temporary files..." rm -f*} trap # Run cleanup when script exits trap # Also on Ctrl-C or kill
+```shell
+#!/usr/bin/env bash
+cleanup() {
+    echo "Cleaning up temporary files..."
+    rm -f /tmp/mytemp.*
+}
+trap cleanup EXIT  # Run cleanup when script exits
+trap cleanup SIGINT SIGTERM  # Also on Ctrl-C or kill
 ```
 
 # 远程机器
 
 程序员在日常工作中与远程服务器打交道越来越普遍。这项工作最常见的工具是 SSH（Secure Shell，安全外壳），它帮助我们连接到远程服务器，并提供大家现在已经熟悉的 shell 界面。我们用类似下面的命令连接到服务器：
 
-```
-ssh alice@server.mit.edu 
+```bash
+ssh alice@server.mit.edu
 ```
 
 这里我们尝试以用户 `alice` 的身份 ssh 登录服务器 `server.mit.edu`。
 
 `ssh` 一个常被忽视的特性是以非交互方式运行命令的能力。`ssh` 会正确处理发送命令的 stdin 和接收命令的 stdout，所以我们可以把它和其他命令组合起来
 
-```
-# here ls runs in the remote, and wc runs locally ls wc -l # here both ls and wc run in the server'ls | wc -l'
+```shell
+# here ls runs in the remote, and wc runs locally
+ssh alice@server ls | wc -l
+
+# here both ls and wc run in the server
+ssh alice@server 'ls | wc -l'
+
 ```
 
 > 试试安装 [Mosh](https://mosh.org/) 作为 SSH 的替代品，它能应对断连、进入/退出睡眠、切换网络以及高延迟链路。
@@ -249,24 +391,36 @@ ssh alice@server.mit.edu
 
 要生成一对密钥，可以运行 [`ssh-keygen`](https://www.man7.org/linux/man-pages/man1/ssh-keygen.1.html)。
 
-```
--a -t -f
+```bash
+ssh-keygen -a 100 -t ed25519 -f ~/.ssh/id_ed25519
 ```
 
 如果你曾经配置过使用 SSH 密钥向 GitHub 推送，那么你大概已经完成了[这里](https://help.github.com/articles/connecting-to-github-with-ssh/)列出的步骤，并且已经拥有一个有效的密钥对。要检查你的密钥是否有口令短语（passphrase）并验证它，可以运行 `ssh-keygen -y -f /path/to/key`。
 
 在服务器端，`ssh` 会查看 `.ssh/authorized_keys` 来决定应该放行哪些客户端。要把公钥复制过去，你可以使用：
 
-```
-cat'cat >> ~/.ssh/authorized_keys'# or more simply (if ssh-copy-id is available) -i
+```bash
+cat .ssh/id_ed25519.pub | ssh alice@remote 'cat >> ~/.ssh/authorized_keys'
+
+# or more simply (if ssh-copy-id is available)
+
+ssh-copy-id -i .ssh/id_ed25519 alice@remote
 ```
 
 除了运行命令之外，ssh 建立的连接还可以用来在服务器和本地之间安全地传输文件。[`scp`](https://www.man7.org/linux/man-pages/man1/scp.1.html) 是最传统的工具，语法是 `scp path/to/local_file remote_host:path/to/remote_file`。[`rsync`](https://www.man7.org/linux/man-pages/man1/rsync.1.html) 在 `scp` 的基础上做了改进：它能检测本地和远端相同的文件，防止再次复制它们。它还提供对符号链接（symlink）、权限更细粒度的控制，并有像 `--partial` 标志这样的额外功能，可以从之前中断的复制处继续。`rsync` 的语法与 `scp` 类似。
 
 SSH 客户端配置位于 `~/.ssh/config`，它让我们可以声明主机并为它们设置默认选项。这个配置文件不仅被 `ssh` 读取，`scp`、`rsync`、`mosh` 等程序也会读取它。
 
-```
-# Configs can also take wildcards*
+```bash
+Host vm
+    User alice
+    HostName 172.16.174.141
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+
+# Configs can also take wildcards
+Host *.mit.edu
+    User alice
 ```
 
 # 终端复用器
@@ -277,28 +431,28 @@ SSH 客户端配置位于 `~/.ssh/config`，它让我们可以声明主机并为
 
 如今最流行的终端复用器是 [`tmux`](https://www.man7.org/linux/man-pages/man1/tmux.1.html)。`tmux` 的可配置性很强，通过使用相应的按键绑定，你可以创建多个标签页和窗格，并在它们之间快速导航。
 
-`tmux` 要求你熟悉它的按键绑定，它们都采用  `x` 的形式，意思是 (1) 按下 `Ctrl+b`，(2) 松开 `Ctrl+b`，然后 (3) 按下 `x`。`tmux` 有如下对象层次结构：
+`tmux` 要求你熟悉它的按键绑定，它们都采用 `<C-b> x` 的形式，意思是 (1) 按下 `Ctrl+b`，(2) 松开 `Ctrl+b`，然后 (3) 按下 `x`。`tmux` 有如下对象层次结构：
 
 * **会话（Sessions）** - 会话是一个独立的工作空间，包含一个或多个窗口
   + `tmux` 启动一个新会话。
   + `tmux new -s NAME` 以该名字启动会话。
   + `tmux ls` 列出当前的会话
-  + 在 `tmux` 中键入  `d` 分离当前会话
+  + 在 `tmux` 中键入 `<C-b> d` 分离当前会话
   + `tmux a` 连接最近的会话。你可以用 `-t` 标志指定连接哪一个
 * **窗口（Windows）** - 相当于编辑器或浏览器中的标签页，是同一会话中视觉上相互独立的部分
-  + `c` 创建一个新窗口。要关闭它，只需终止其中的 shell 即可
-  + `N` 跳转到第 *N* 个窗口。注意它们是按数字编号的
-  + `p` 跳转到上一个窗口
-  + `n` 跳转到下一个窗口
-  + `,` 重命名当前窗口
-  + `w` 列出当前的窗口
+  + `<C-b> c` 创建一个新窗口。要关闭它，只需按 `<C-d>` 终止其中的 shell 即可
+  + `<C-b> N` 跳转到第 *N* 个窗口。注意它们是按数字编号的
+  + `<C-b> p` 跳转到上一个窗口
+  + `<C-b> n` 跳转到下一个窗口
+  + `<C-b> ,` 重命名当前窗口
+  + `<C-b> w` 列出当前的窗口
 * **窗格（Panes）** - 类似 vim 的分屏，窗格让你在同一个显示画面中拥有多个 shell。
-  + `\"` 水平分割当前窗格
-  + `%` 垂直分割当前窗格
-  + 移动到指定*方向*的窗格。这里的方向指方向键。
-  + `z` 切换当前窗格的缩放（最大化）
-  + `[` 进入回滚浏览。然后可以按  开始一个选区，并按  复制该选区。
-  + 在不同的窗格布局之间循环切换。
+  + `<C-b> "` 水平分割当前窗格
+  + `<C-b> %` 垂直分割当前窗格
+  + `<C-b> <direction>` 移动到指定*方向*的窗格。这里的方向指方向键。
+  + `<C-b> z` 切换当前窗格的缩放（最大化）
+  + `<C-b> [` 进入回滚浏览。然后可以按 `<space>` 开始一个选区，并按 `<enter>` 复制该选区。
+  + `<C-b> <space>` 在不同的窗格布局之间循环切换。
 
 > 想进一步了解 tmux，可以阅读[这篇](https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/)快速教程和[这篇](https://linuxcommand.org/lc3_adv_termmux.php)更详细的讲解。
 
@@ -322,8 +476,8 @@ shell 就是用这类文件配置的程序的一个例子。启动时，你的 s
 
 一个常见的配置改动是添加新的位置供 shell 查找程序。你在安装软件时会遇到这种模式：
 
-```
-export PATH = " $PATH:path/to/append"
+```shell
+export PATH="$PATH:path/to/append"
 ```
 
 这里，我们让 shell 把 $PATH 变量的值设置为其当前值再加上一个新路径，并让所有子进程继承这个新的 PATH 值。这将使子进程能够找到位于 `path/to/append` 下的程序。
@@ -332,42 +486,85 @@ export PATH = " $PATH:path/to/append"
 
 下面是在 macOS 上用 Homebrew 安装两个实用工具的方法：
 
-```
-# ripgrep: a faster grep with better defaults install # fd: a faster, user-friendly find install 
+```shell
+# ripgrep: a faster grep with better defaults
+brew install ripgrep
+
+# fd: a faster, user-friendly find
+brew install fd
 ```
 
 装好之后，你就可以用 `rg` 代替 `grep`，用 `fd` 代替 `find`。
 
 > **关于 `curl | bash` 的警告**：你经常会看到类似 `curl -fsSL https://example.com/install.sh | bash` 的安装说明。这种模式下载一个脚本并立即执行它，很方便但有风险；你运行的是自己没有检查过的代码。更安全的做法是先下载、审查，然后再执行：
 >
-> ```
-> -fsSL -o # review the script
+> ```shell
+> curl -fsSL https://example.com/install.sh -o install.sh
+> less install.sh  # review the script
+> bash install.sh
 > ```
 >
-> 有些安装程序使用一种稍安全的变体：`/bin/bash -c \"$(curl -fsSL https://url)\"`，它至少能确保由 bash 而不是你当前的 shell 来解释脚本。
+> 有些安装程序使用一种稍安全的变体：`/bin/bash -c "$(curl -fsSL https://url)"`，它至少能确保由 bash 而不是你当前的 shell 来解释脚本。
 
 当你尝试运行一个没有安装的命令时，你的 shell 会显示 `command not found`。网站 [command-not-found.com](https://command-not-found.com) 是一份有用的资源，你可以用它搜索任何命令，了解如何在不同的包管理器和发行版上安装它。
 
 另一个实用工具是 [`tldr`](https://tldr.sh/)，它提供简化的、以示例为主的 man 手册页。不必读完冗长的文档，你就能快速看到常见的用法模式：
 
-```
-$   An alternative to find. Aims to be faster and easier to use than find. Recursively find files matching a pattern in the current directory: fd "pattern" Find files that begin with "foo": fd "^foo" Find files with a specific extension: fd --extension txt 
+```console
+$ tldr fd
+  An alternative to find.
+  Aims to be faster and easier to use than find.
+
+  Recursively find files matching a pattern in the current directory:
+      fd "pattern"
+
+  Find files that begin with "foo":
+      fd "^foo"
+
+  Find files with a specific extension:
+      fd --extension txt
 ```
 
 有时候你需要的并不是一整个新程序，而只是给现有命令加上特定标志的快捷方式。这时别名（alias）就派上用场了。
 
 我们也可以使用 `alias` shell 内建命令创建自己的命令别名。shell 别名是另一个命令的简写形式，你的 shell 会在对表达式求值之前自动替换它。例如，bash 中的一个别名有如下结构：
 
-```
-alias alias_name = "command_to_alias arg1 arg2"
+```bash
+alias alias_name="command_to_alias arg1 arg2"
 ```
 
 > 注意等号 `=` 两边没有空格，因为 [`alias`](https://www.man7.org/linux/man-pages/man1/alias.1p.html) 是一个只接受单个参数的 shell 命令。
 
 别名有许多方便的特性：
 
-```
-# Make shorthands for common flags alias ll ="ls -lh" # Save a lot of typing for common commands alias gs = "git status" alias gc = "git commit" # Save you from mistyping alias sl = ls # Overwrite existing commands for better defaults alias mv ="mv -i"# -i prompts before overwrite alias mkdir ="mkdir -p"# -p make parent dirs as needed alias df ="df -h"# -h prints human readable format # Alias can be composed alias la ="ls -A" alias lla ="la -l" # To ignore an alias run it prepended with \ \l # Or disable an alias altogether with unalias unalias # To get an alias definition just call it with alias alias # Will print ll='ls -lh'
+```bash
+# Make shorthands for common flags
+alias ll="ls -lh"
+
+# Save a lot of typing for common commands
+alias gs="git status"
+alias gc="git commit"
+
+# Save you from mistyping
+alias sl=ls
+
+# Overwrite existing commands for better defaults
+alias mv="mv -i"           # -i prompts before overwrite
+alias mkdir="mkdir -p"     # -p make parent dirs as needed
+alias df="df -h"           # -h prints human readable format
+
+# Alias can be composed
+alias la="ls -A"
+alias lla="la -l"
+
+# To ignore an alias run it prepended with \
+\ls
+# Or disable an alias altogether with unalias
+unalias la
+
+# To get an alias definition just call it with alias
+alias ll
+# Will print ll='ls -lh'
 ```
 
 别名有局限性：它们无法在命令中间接受参数。要实现更复杂的行为，你应该改用 shell 函数。
@@ -403,17 +600,32 @@ alias alias_name = "command_to_alias arg1 arg2"
 
 **命令生成**：像 [`simonw/llm`](https://github.com/simonw/llm) 这样的工具可以帮助从自然语言描述生成 shell 命令：
 
-```
-$  "find all python files modified in the last week"find . -name "*.py" -mtime -7 
+```console
+$ llm cmd "find all python files modified in the last week"
+find . -name "*.py" -mtime -7
 ```
 
 **管道集成**：大语言模型（LLM）可以集成到 shell 管道中来处理和转换数据。当你需要从不一致的格式中提取信息、而用正则表达式会很痛苦时，它们特别有用：
 
-```
-$  cat Contact: john.doe@example.com User 'alice_smith' logged in at 3pm Posted by: @bob_jones on Twitter Author: Jane Doe (jdoe) Message from mike_wilson yesterday Submitted by user: sarah.connor $  INSTRUCTIONS ="Extract just the username from each line, one per line, nothing else" $  " $INSTRUCTIONS "john.doe alice_smith bob_jones jdoe mike_wilson sarah.connor 
+```console
+$ cat users.txt
+Contact: john.doe@example.com
+User 'alice_smith' logged in at 3pm
+Posted by: @bob_jones on Twitter
+Author: Jane Doe (jdoe)
+Message from mike_wilson yesterday
+Submitted by user: sarah.connor
+$ INSTRUCTIONS="Extract just the username from each line, one per line, nothing else"
+$ llm "$INSTRUCTIONS" < users.txt
+john.doe
+alice_smith
+bob_jones
+jdoe
+mike_wilson
+sarah.connor
 ```
 
-注意我们使用了 `\"$INSTRUCTIONS\"`（加了引号），因为变量中包含空格，还用 `< users.txt` 把文件的内容重定向到 stdin。
+注意我们使用了 `"$INSTRUCTIONS"`（加了引号），因为变量中包含空格，还用 `< users.txt` 把文件的内容重定向到 stdin。
 
 **AI shell**：像 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 这样的工具充当一种元 shell（meta-shell），它接受英语命令并把它们翻译成 shell 操作、文件编辑以及更复杂的多步骤任务。
 
@@ -444,8 +656,12 @@ $  cat Contact: john.doe@example.com User 'alice_smith' logged in at 3pm Posted 
    一个示例输出大致是这样的：
 
    ```
-    -rw-r--r-- 1 user group 1.1M Jan 14 09:53 baz drwxr-xr-x 5 user group 160 Jan 14 09:53 . -rw-r--r-- 1 user group 514 Jan 14 06:42 bar -rw-r--r-- 1 user group 106M Jan 13 12:12 foo drwx------+ 47 user group 1.5K Jan 12 18:08 .. 
-   ```
+    -rw-r--r--   1 user group 1.1M Jan 14 09:53 baz
+    drwxr-xr-x   5 user group  160 Jan 14 09:53 .
+    -rw-r--r--   1 user group  514 Jan 14 06:42 bar
+    -rw-r--r--   1 user group 106M Jan 13 12:12 foo
+    drwx------+ 47 user group 1.5K Jan 12 18:08 ..
+    ```
 3. 进程替换 `<(command)` 让你可以把命令的输出当作文件来使用。用 `diff` 配合进程替换来比较 `printenv` 和 `export` 的输出。它们为什么不同？（提示：试试 `diff <(printenv | sort) <(export | sort)`）。
 
 ## 环境变量
@@ -456,9 +672,19 @@ $  cat Contact: john.doe@example.com User 'alice_smith' logged in at 3pm Posted 
 
 1. 假设你有一条很少失败的命令。为了调试它，你需要捕获它的输出，但要等到一次失败的运行可能很费时间。编写一个 bash 脚本，反复运行下面的脚本直到它失败，把它的标准输出流和错误流捕获到文件中，并在最后打印所有内容。如果你还能报告脚本失败前运行了多少次，可以得到额外加分。
 
-   ```
-   #!/usr/bin/env bash n =$((% 100)) if[[$n -eq]]; then echo "Something went wrong"> echo "The error was using magic numbers" exit fi echo "Everything went according to plan"
-   ```
+   ```bash
+    #!/usr/bin/env bash
+
+    n=$(( RANDOM % 100 ))
+
+    if [[ $n -eq 42 ]]; then
+       echo "Something went wrong"
+       >&2 echo "The error was using magic numbers"
+       exit 1
+    fi
+
+    echo "Everything went according to plan"
+    ```
 
 ## 信号与作业控制
 
@@ -493,9 +719,13 @@ $  cat Contact: john.doe@example.com User 'alice_smith' logged in at 3pm Posted 
 1. 进入 `~/.ssh/` 并检查那里是否有一对 SSH 密钥。如果没有，用 `ssh-keygen -a 100 -t ed25519` 生成它们。建议你使用口令短语并使用 `ssh-agent`，更多信息见[这里](https://www.ssh.com/ssh/agent)。
 2. 编辑 `.ssh/config`，加入如下条目：
 
-   ```
-    Host vm User username_goes_here HostName ip_goes_here IdentityFile ~/.ssh/id_ed25519 LocalForward 9999 localhost:8888 
-   ```
+   ```bash
+    Host vm
+        User username_goes_here
+        HostName ip_goes_here
+        IdentityFile ~/.ssh/id_ed25519
+        LocalForward 9999 localhost:8888
+    ```
 3. 用 `ssh-copy-id vm` 把你的 ssh 密钥复制到服务器上。
 4. 在你的虚拟机中执行 `python -m http.server 8888` 启动一个 web 服务器。在你的机器上导航到 `http://localhost:9999` 来访问虚拟机上的 web 服务器。
 5. 通过执行 `sudo vim /etc/ssh/sshd_config` 编辑你的 SSH 服务器配置，修改 `PasswordAuthentication` 的值来禁用密码认证。修改 `PermitRootLogin` 的值来禁用 root 登录。用 `sudo service sshd restart` 重启 `ssh` 服务。再次尝试 ssh 登录。

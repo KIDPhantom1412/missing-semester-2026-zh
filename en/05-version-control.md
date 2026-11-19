@@ -12,6 +12,8 @@ Modern VCSs also let you easily (and often automatically) answer questions like:
 
 While other VCSs exist, **Git** is the de facto standard for version control. This [XKCD comic](https://xkcd.com/1597/) captures Git’s reputation:
 
+![xkcd 1597](https://imgs.xkcd.com/comics/git.png)
+
 Because Git’s interface is a leaky abstraction, learning Git top-down (starting with its interface / command-line interface) can lead to a lot of confusion. It’s possible to memorize a handful of commands and think of them as magic incantations, and follow the approach in the comic above whenever anything goes wrong.
 
 While Git admittedly has an ugly interface, its underlying design and ideas are beautiful. While an ugly interface has to be *memorized*, a beautiful design can be *understood*. For this reason, we give a bottom-up explanation of Git, starting with its data model and later covering the command-line interface. Once the data model is understood, the commands can be better understood in terms of how they manipulate the underlying data model.
@@ -25,7 +27,13 @@ Git’s ingenuity is in its well-thought-out data model that enables all the nic
 Git models the history of a collection of files and folders within some top-level directory as a series of snapshots. In Git terminology, a file is called a “blob”, and it’s just a bunch of bytes. A directory is called a “tree”, and it maps names to blobs or trees (so directories can contain other directories). A snapshot is the top-level tree that is being tracked. For example, we might have a tree as follows:
 
 ```
- (tree) | +- foo (tree) | | | + bar.txt (blob, contents = "hello world") | +- baz.txt (blob, contents = "git is wonderful") 
+<root> (tree)
+|
++- foo (tree)
+|  |
+|  + bar.txt (blob, contents = "hello world")
+|
++- baz.txt (blob, contents = "git is wonderful")
 ```
 
 The top-level tree contains two elements, a tree “foo” (that itself contains one element, a blob “bar.txt”), and a blob “baz.txt”.
@@ -39,14 +47,22 @@ In Git, a history is a directed acyclic graph (DAG) of snapshots. That may sound
 Git calls these snapshots “commit”s. Visualizing a commit history might look something like this:
 
 ```
-o <-- o <-- o <-- o ^ \ --- o <-- o 
+o <-- o <-- o <-- o
+            ^
+             \
+              --- o <-- o
 ```
 
 In the ASCII art above, the `o`s correspond to individual commits (snapshots). The arrows point to the parent of each commit (it’s a “comes before” relation, not “comes after”). After the third commit, the history branches into two separate branches. This might correspond to, for example, two separate features being developed in parallel, independently from each other. In the future, these branches may be merged to create a new snapshot that incorporates both of the features, producing a new history that looks like this, with the newly created merge commit shown in bold:
 
-```
- o <-- o <-- o <-- o <---- o ^ / \ v --- o <-- o  
-```
+<pre class="highlight">
+<code>
+o <-- o <-- o <-- o <---- <strong>o</strong>
+            ^            /
+             \          v
+              --- o <-- o
+</code>
+</pre>
 
 Commits in Git are immutable. This doesn’t mean that mistakes can’t be corrected, however; it’s just that “edits” to the commit history are actually creating entirely new commits, and references (see below) are updated to point to the new ones.
 
@@ -55,7 +71,19 @@ Commits in Git are immutable. This doesn’t mean that mistakes can’t be corre
 It may be instructive to see Git’s data model written down in pseudocode:
 
 ```
-// a file is a bunch of bytes type blob = array // a directory contains named files and directories type tree = map // a commit has parents, metadata, and the top-level tree type commit = struct { parents: array author: string message: string snapshot: tree } 
+// a file is a bunch of bytes
+type blob = array<byte>
+
+// a directory contains named files and directories
+type tree = map<string, tree | blob>
+
+// a commit has parents, metadata, and the top-level tree
+type commit = struct {
+    parents: array<commit>
+    author: string
+    message: string
+    snapshot: tree
+}
 ```
 
 It’s a clean, simple model of history.
@@ -65,13 +93,20 @@ It’s a clean, simple model of history.
 An “object” is a blob, tree, or commit:
 
 ```
-type object = blob | tree | commit 
+type object = blob | tree | commit
 ```
 
 In Git’s data store, all objects are content-addressed by their [SHA-1 hash](https://en.wikipedia.org/wiki/SHA-1).
 
 ```
-objects = map def store(object): id = sha1(object) objects[id] = object def load(id): return objects[id] 
+objects = map<string, object>
+
+def store(object):
+    id = sha1(object)
+    objects[id] = object
+
+def load(id):
+    return objects[id]
 ```
 
 Blobs, trees, and commits are unified in this way: they are all objects. When they reference other objects, they don’t actually *contain* them in their on-disk representation, but have a reference to them by their hash.
@@ -79,13 +114,14 @@ Blobs, trees, and commits are unified in this way: they are all objects. When th
 For example, the tree for the example directory structure [above](#snapshots) (visualized using `git cat-file -p 698281bc680d1995c5f4caaf3359721a5a58d48d`), looks like this:
 
 ```
-100644 blob 4448adbf7ecd394f42ae135bbeed9676e894af85 baz.txt 040000 tree c68d233a33c5c06e0340e4c224f0afca87c8ce87 foo 
+100644 blob 4448adbf7ecd394f42ae135bbeed9676e894af85    baz.txt
+040000 tree c68d233a33c5c06e0340e4c224f0afca87c8ce87    foo
 ```
 
 The tree itself contains pointers to its contents, `baz.txt` (a blob) and `foo` (a tree). If we look at the contents addressed by the hash corresponding to baz.txt with `git cat-file -p 4448adbf7ecd394f42ae135bbeed9676e894af85`, we get the following:
 
 ```
-git is wonderful 
+git is wonderful
 ```
 
 ## References
@@ -95,7 +131,19 @@ Now, all snapshots can be identified by their SHA-1 hashes. That’s inconvenien
 Git’s solution to this problem is human-readable names for SHA-1 hashes, called “references”. References are pointers to commits. Unlike objects, which are immutable, references are mutable (can be updated to point to a new commit). For example, the `master` reference usually points to the latest commit in the main branch of development.
 
 ```
-references = map def update_reference(name, id): references[name] = id def read_reference(name): return references[name] def load_reference(name_or_id): if name_or_id in references: return load(references[name_or_id]) else: return load(name_or_id) 
+references = map<string, string>
+
+def update_reference(name, id):
+    references[name] = id
+
+def read_reference(name):
+    return references[name]
+
+def load_reference(name_or_id):
+    if name_or_id in references:
+        return load(references[name_or_id])
+    else:
+        return load(name_or_id)
 ```
 
 With this, Git can use human-readable names like “master” to refer to a particular snapshot in the history, instead of a long hexadecimal string.
@@ -124,36 +172,36 @@ To avoid duplicating information, we’re not going to explain the commands belo
 
 ## Basics
 
-* `git help` : get help for a git command
+* `git help <command>`: get help for a git command
 * `git init`: creates a new git repo, with data stored in the `.git` directory
 * `git status`: tells you what’s going on
-* `git add` : adds files to staging area
+* `git add <filename>`: adds files to staging area
 * `git commit`: creates a new commit
   + Write [good commit messages](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)!
   + Even more reasons to write [good commit messages](https://chris.beams.io/posts/git-commit/)!
 * `git log`: shows a flattened log of history
 * `git log --all --graph --decorate`: visualizes history as a DAG
-* `git diff` : show changes you made relative to the staging area
-* `git diff` : shows differences in a file between snapshots
-* `git checkout` : updates HEAD (and current branch if checking out a branch)
+* `git diff <filename>`: show changes you made relative to the staging area
+* `git diff <revision> <filename>`: shows differences in a file between snapshots
+* `git checkout <revision>`: updates HEAD (and current branch if checking out a branch)
 
 ## Branching and merging
 
 * `git branch`: shows branches
-* `git branch` : creates a branch
-* `git switch` : switches to a branch
-* `git checkout -b` : creates a branch and switches to it
-  + same as `git branch ; git switch`
-* `git merge` : merges into current branch
+* `git branch <name>`: creates a branch
+* `git switch <name>`: switches to a branch
+* `git checkout -b <name>`: creates a branch and switches to it
+  + same as `git branch <name>; git switch <name>`
+* `git merge <revision>`: merges into current branch
 * `git mergetool`: use a fancy tool to help resolve merge conflicts
 * `git rebase`: rebase set of patches onto a new base
 
 ## Remotes
 
 * `git remote`: list remotes
-* `git remote add` : add a remote
-* `git push  :`: send objects to remote, and update remote reference
-* `git branch --set-upstream-to=/`: set up correspondence between local and remote branch
+* `git remote add <name> <url>`: add a remote
+* `git push <remote> <local branch>:<remote branch>`: send objects to remote, and update remote reference
+* `git branch --set-upstream-to=<remote>/<remote branch>`: set up correspondence between local and remote branch
 * `git fetch`: retrieve objects/references from a remote
 * `git pull`: same as `git fetch; git merge`
 * `git clone`: download repository from remote
@@ -161,7 +209,7 @@ To avoid duplicating information, we’re not going to explain the commands belo
 ## Undo
 
 * `git commit --amend`: edit a commit’s contents/message
-* `git reset` : unstage a file
+* `git reset <file>`: unstage a file
 * `git restore`: discard changes
 
 # Advanced Git

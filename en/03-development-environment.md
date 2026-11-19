@@ -33,13 +33,13 @@ Keystrokes have different meanings in different operating modes. For example, th
 
 In its default configuration, Vim shows the current mode in the bottom left. The initial/default mode is Normal mode. You’ll generally spend most of your time between Normal mode and Insert mode.
 
-You change modes by pressing  (the escape key) to switch from any mode back to Normal mode. From Normal mode, enter Insert mode with `i`, Replace mode with `R`, Visual mode with `v`, Visual Line mode with `V`, Visual Block mode with  (Ctrl-V, sometimes also written `^V`), and Command-line mode with `:`.
+You change modes by pressing `<ESC>` (the escape key) to switch from any mode back to Normal mode. From Normal mode, enter Insert mode with `i`, Replace mode with `R`, Visual mode with `v`, Visual Line mode with `V`, Visual Block mode with `<C-v>` (Ctrl-V, sometimes also written `^V`), and Command-line mode with `:`.
 
-You use the  key a lot when using Vim: consider remapping Caps Lock to Escape ([macOS instructions](https://vim.fandom.com/wiki/Map_caps_lock_to_escape_in_macOS)) or create an [alternative mapping](https://vim.fandom.com/wiki/Avoid_the_escape_key#Mappings) for  with a simple key sequence.
+You use the `<ESC>` key a lot when using Vim: consider remapping Caps Lock to Escape ([macOS instructions](https://vim.fandom.com/wiki/Map_caps_lock_to_escape_in_macOS)) or create an [alternative mapping](https://vim.fandom.com/wiki/Avoid_the_escape_key#Mappings) for `<ESC>` with a simple key sequence.
 
 ## Basics: inserting text
 
-From Normal mode, press `i` to enter Insert mode. Now, Vim behaves like any other text editor, until you press  to return to Normal mode. This, along with the basics explained above, are all you need to start editing files using Vim (though not particularly efficiently, if you’re spending all your time editing from Insert mode).
+From Normal mode, press `i` to enter Insert mode. Now, Vim behaves like any other text editor, until you press `<ESC>` to return to Normal mode. This, along with the basics explained above, are all you need to start editing files using Vim (though not particularly efficiently, if you’re spending all your time editing from Insert mode).
 
 ## Vim’s interface is a programming language
 
@@ -55,8 +55,8 @@ You should spend most of your time in Normal mode, using movement commands to na
 * Screen: `H` (top of screen), `M` (middle of screen), `L` (bottom of screen)
 * Scroll: `Ctrl-u` (up), `Ctrl-d` (down)
 * File: `gg` (beginning of file), `G` (end of file)
-* Line numbers: `:{number}` or `{number}G` (line {number})
-  + refers to the carriage return / enter key
+* Line numbers: `:{number}<CR>` or `{number}G` (line {number})
+  + `<CR>` refers to the carriage return / enter key
 * Misc: `%` (matching item, like parenthesis or brace)
 * Find: `f{character}`, `t{character}`, `F{character}`, `T{character}`
   + find/to forward/backward {character} on the current line
@@ -89,7 +89,7 @@ Everything that you used to do with the mouse, you now do with the keyboard usin
 * `s` substitute character (equivalent to `cl`)
 * Visual mode + manipulation
   + select text, `d` to delete it or `c` to change it
-* `u` to undo,  to redo
+* `u` to undo, `<C-r>` to redo
 * `y` to copy / “yank” (some other commands like `d` also copy)
 * `p` to paste
 * Lots more to learn: for example, `~` flips the case of a character, and `J` joins together lines
@@ -114,8 +114,19 @@ You can use modifiers to change the meaning of a noun. Some modifiers are `i`, w
 
 Here is a broken [fizz buzz](https://en.wikipedia.org/wiki/Fizz_buzz) implementation:
 
-```
-def fizz_buzz(limit): for i in range(limit): if i % 3 == 0: print("fizz", end = "") if i % 5 == 0: print("fizz", end = "") if i % 3 and i % 5: print(i, end = "") print() def main(): fizz_buzz(20)
+```python
+def fizz_buzz(limit):
+    for i in range(limit):
+        if i % 3 == 0:
+            print("fizz", end="")
+        if i % 5 == 0:
+            print("fizz", end="")
+        if i % 3 and i % 5:
+            print(i, end="")
+        print()
+
+def main():
+    fizz_buzz(20)
 ```
 
 We use the following sequence of commands to fix the issues, beginning in Normal mode:
@@ -125,19 +136,19 @@ We use the following sequence of commands to fix the issues, beginning in Normal
   + `o` to **o**pen a new line below
   + Type in `if __name__ == "__main__": main()`
     - If your editor has Python language support, it might do some auto-indentation for you in Insert mode
-  + to go back to Normal mode
+  + `<ESC>` to go back to Normal mode
 * Starts at 0 instead of 1
-  + `/` followed by `range` and  to search for “range”
+  + `/` followed by `range` and `<CR>` to search for “range”
   + `ww` to move forward two **w**ords (you could also use `2w`, but in practice, for small counts it’s common to repeat the key instead of using the count functionality)
   + `i` to switch to **i**nsert mode, and add `1,`
-  + to go back to Normal mode
+  + `<ESC>` to go back to Normal mode
   + `e` to jump to the **e**nd of the next word
   + `a` to start **a**ppending text, and add `+ 1`
-  + to go back to Normal mode
+  + `<ESC>` to go back to Normal mode
 * Prints “fizz” for multiples of 5
-  + `:6` to go to line 6
+  + `:6<CR>` to go to line 6
   + `ci"` to **c**hange **i**nside the ‘**“**’, change to `"buzz"`
-  + to go back to Normal mode
+  + `<ESC>` to go back to Normal mode
 
 ## Learning Vim
 
@@ -182,38 +193,45 @@ AI-powered autocomplete has the same form factor as traditional autocomplete in 
 
 For example, let’s write a script to download the contents of these lecture notes and extract all the links. We can start with:
 
-```
-import requests def download_contents(url: str) -> str:
+```python
+import requests
+
+def download_contents(url: str) -> str:
 ```
 
 The model will autocomplete the body of the function:
 
-```
-response = requests. get(url) return response. text
+```python
+    response = requests.get(url)
+    return response.text
 ```
 
 We can further guide completions using comments. For example, if we start writing a function to extract all Markdown links, but it doesn’t have a particularly descriptive name:
 
-```
+```python
 def extract(contents: str) -> list[str]:
 ```
 
 The model will autocomplete something like this:
 
-```
-lines = contents. splitlines() return[line for line in lines if line. strip()]
+```python
+    lines = contents.splitlines()
+    return [line for line in lines if line.strip()]
 ```
 
 We can guide the completion through code comments:
 
-```
-def extract(content: str) -> list[str]: # extract all Markdown links from the content 
+```python
+def extract(content: str) -> list[str]:
+    # extract all Markdown links from the content
 ```
 
 This time, the model gives a better completion:
 
-```
-import re pattern = r'\[.*?\]\((.*?)\)' return re. findall(pattern, content)
+```python
+    import re
+    pattern = r'\[.*?\]\((.*?)\)'
+    return re.findall(pattern, content)
 ```
 
 Here, we see one downside of this AI coding tool: it can only provide completions at the cursor. In this case, it would be better practice to put the `import re` at the module level, rather than inside the function.
@@ -222,7 +240,7 @@ The example above used a poorly-named function to demonstrate how code completio
 
 For demonstration purposes, we can complete the script:
 
-```
+```python
 print(extract(download_contents("https://raw.githubusercontent.com/missing-semester/missing-semester/refs/heads/master/_2026/development-environment.md")))
 ```
 
@@ -233,13 +251,17 @@ Inline chat lets you select a line or block and then directly prompt the AI mode
 Continuing the example from above, suppose we decided not to use the third-party `requests` library. We could select the relevant three lines of code, invoke inline chat, and say something like:
 
 ```
-use built-in libraries instead 
+use built-in libraries instead
 ```
 
 The model proposes:
 
-```
-fromurllib.request import urlopen def download_contents(url: str) -> str: with urlopen(url) as response: return response. read(). decode('utf-8')
+```python
+from urllib.request import urlopen
+
+def download_contents(url: str) -> str:
+    with urlopen(url) as response:
+        return response.read().decode('utf-8')
 ```
 
 ## Coding agents

@@ -33,8 +33,8 @@ Some linters can not only flag issues but also automatically fix certain issues 
 
 Aside from language-specific linters, another tool that might come in handy is [semgrep](https://github.com/semgrep/semgrep), a “semantic grep” tool that works at the AST level (rather than character level, like grep) and supports many languages. You can use semgrep to easily write custom linter rules for your projects. For example, if you wanted to prevent the dangerous `subprocess.Popen(..., shell=True)` in Python, you could find that code pattern with:
 
-```
--l -e"subprocess.Popen(..., shell=True, ...)"
+```bash
+semgrep -l python -e "subprocess.Popen(..., shell=True, ...)"
 ```
 
 # Testing
@@ -119,8 +119,10 @@ You can find a comprehensive guide to regex syntax in [this documentation](https
 
 If you use regex groups `(...)`, you can refer to sub-parts of the match for extraction or search-and-replace purposes. For example, to extract just the month from a YYYY-MM-DD style date, you can use the following Python code:
 
-```
->>> import re>>> re. match(r"\d{4}-(\d{2})-\d{2}","2026-01-14"). group(1) '01'
+```python
+>>> import re
+>>> re.match(r"\d{4}-(\d{2})-\d{2}", "2026-01-14").group(1)
+'01'
 ```
 
 In your text editor, you can use reference capture groups in replace patterns. The syntax might vary between IDEs. For example, in VS Code, you can use variables like `$1`, `$2`, etc., and in Vim, you can use `\1`, `\2`, etc., to reference groups.
@@ -136,7 +138,9 @@ We recommend learning the fundamentals (what we have covered in this lecture), a
 Conversational AI tools can be effective at helping you generating regex patterns. For example, try prompting your favorite LLM with the following query:
 
 ```
-Write a Python-style regex pattern that matches the requested path from log lines from Nginx. Here is an example log line: 169.254.1.1 - - [09/Jan/2026:21:28:51 +0000] "GET /feed.xml HTTP/2.0" 200 2995 "-" "python-requests/2.32.3" 
+Write a Python-style regex pattern that matches the requested path from log lines from Nginx. Here is an example log line:
+
+169.254.1.1 - - [09/Jan/2026:21:28:51 +0000] "GET /feed.xml HTTP/2.0" 200 2995 "-" "python-requests/2.32.3"
 ```
 
 # Exercises

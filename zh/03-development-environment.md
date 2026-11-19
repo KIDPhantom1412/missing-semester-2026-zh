@@ -114,8 +114,19 @@ Vim 的界面是一门编程语言。按键（带有助记的名称）就是命�
 
 下面是一个有 bug 的 [fizz buzz](https://en.wikipedia.org/wiki/Fizz_buzz) 实现：
 
-```
-def fizz_buzz(limit): for i in range(limit): if i % 3 == 0: print("fizz", end = "") if i % 5 == 0: print("fizz", end = "") if i % 3 and i % 5: print(i, end = "") print() def main(): fizz_buzz(20)
+```python
+def fizz_buzz(limit):
+    for i in range(limit):
+        if i % 3 == 0:
+            print("fizz", end="")
+        if i % 5 == 0:
+            print("fizz", end="")
+        if i % 3 and i % 5:
+            print(i, end="")
+        print()
+
+def main():
+    fizz_buzz(20)
 ```
 
 我们从普通模式开始，用以下命令序列来修复这些问题：
@@ -182,38 +193,45 @@ AI 驱动的自动补全与 IDE 中传统自动补全的形态相同：在你输
 
 例如，我们要写一个脚本来下载这份讲义的内容并提取其中所有链接。可以这样开始：
 
-```
-import requests def download_contents(url: str) -> str:
+```python
+import requests
+
+def download_contents(url: str) -> str:
 ```
 
 模型会补全函数体：
 
-```
-response = requests. get(url) return response. text
+```python
+    response = requests.get(url)
+    return response.text
 ```
 
 我们可以用注释进一步引导补全。例如，如果我们要写一个提取所有 Markdown 链接的函数，但函数名并没有特别强的描述性：
 
-```
+```python
 def extract(contents: str) -> list[str]:
 ```
 
 模型会补全出类似这样的内容：
 
-```
-lines = contents. splitlines() return[line for line in lines if line. strip()]
+```python
+    lines = contents.splitlines()
+    return [line for line in lines if line.strip()]
 ```
 
 我们可以通过代码注释来引导补全：
 
-```
-def extract(content: str) -> list[str]: # extract all Markdown links from the content 
+```python
+def extract(content: str) -> list[str]:
+    # extract all Markdown links from the content
 ```
 
 这一次，模型给出了更好的补全：
 
-```
-import re pattern = r'\[.*?\]\((.*?)\)' return re. findall(pattern, content)
+```python
+    import re
+    pattern = r'\[.*?\]\((.*?)\)'
+    return re.findall(pattern, content)
 ```
 
 从这里我们看到这类 AI 编程工具的一个缺点：它只能在光标处提供补全。在这个例子中，更好的做法是把 `import re` 放在模块层级，而不是放在函数内部。
@@ -222,7 +240,7 @@ import re pattern = r'\[.*?\]\((.*?)\)' return re. findall(pattern, content)
 
 出于演示目的，我们可以补全这个脚本：
 
-```
+```python
 print(extract(download_contents("https://raw.githubusercontent.com/missing-semester/missing-semester/refs/heads/master/_2026/development-environment.md")))
 ```
 
@@ -233,13 +251,17 @@ print(extract(download_contents("https://raw.githubusercontent.com/missing-semes
 继续上面的例子，假设我们决定不再使用第三方的 `requests` 库。我们可以选中相关的三行代码，调用内联对话，然后输入类似这样的内容：
 
 ```
-use built-in libraries instead 
+use built-in libraries instead
 ```
 
 模型提出：
 
-```
-fromurllib.request import urlopen def download_contents(url: str) -> str: with urlopen(url) as response: return response. read(). decode('utf-8')
+```python
+from urllib.request import urlopen
+
+def download_contents(url: str) -> str:
+    with urlopen(url) as response:
+        return response.read().decode('utf-8')
 ```
 
 ## 编程智能体
