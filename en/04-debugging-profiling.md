@@ -18,7 +18,7 @@ A second approach is to use logging in your program, instead of ad hoc print sta
 
 Logging statements you’ll also usually proactively put in while programming so that the data you need to debug may already be there! And indeed, once you’ve found and fixed a problem using print statements, it’s often worthwhile to convert those prints into proper log statements before removing them. This way, if similar bugs occur in the future, you’ll already have the diagnostic information you need without modifying the code.
 
-> **Third-party logs**: Many programs support the `-v` or `--verbose` flag to print more information when they run. This can be useful for discovering why a given command fails. Some even allow repeating the flag for more details. When debugging issues with services (databases, web servers, etc.), check their logs—often in `/var/log/` on Linux. Use `journalctl -u`  to view logs for systemd services. For third-party libraries, check if they support debug logging via environment variables or configuration.
+> **Third-party logs**: Many programs support the `-v` or `--verbose` flag to print more information when they run. This can be useful for discovering why a given command fails. Some even allow repeating the flag for more details. When debugging issues with services (databases, web servers, etc.), check their logs—often in `/var/log/` on Linux. Use `journalctl -u <service>` to view logs for systemd services. For third-party libraries, check if they support debug logging via environment variables or configuration.
 
 ## Debuggers
 
@@ -58,8 +58,12 @@ Some of the most frustrating bugs are *Heisenbugs*: bugs that seem to disappear 
 
 Basic usage:
 
-```
-# Record a program execution# Replay the recording (opens GDB)
+```bash
+# Record a program execution
+rr record ./my_program
+
+# Replay the recording (opens GDB)
+rr replay
 ```
 
 The magic happens during replay. Because the execution is deterministic, you can use **reverse debugging** commands:
@@ -95,8 +99,21 @@ Sometimes you need to understand how your program interacts with the operating s
 
 [`strace`](https://www.man7.org/linux/man-pages/man1/strace.1.html) lets you observe every system call a program makes:
 
-```
-# Trace all system calls# Trace only file-related calls -e trace =# Follow child processes (important for programs that start other programs) -f # Trace a running process -p # Show timing information -T
+```bash
+# Trace all system calls
+strace ./my_program
+
+# Trace only file-related calls
+strace -e trace=file ./my_program
+
+# Follow child processes (important for programs that start other programs)
+strace -f ./my_program
+
+# Trace a running process
+strace -p <PID>
+
+# Show timing information
+strace -T ./my_program
 ```
 
 > On macOS and BSD, use [`dtruss`](https://www.manpagez.com/man/1/dtruss/) (which wraps `dtrace`) for similar functionality:
@@ -107,16 +124,24 @@ Sometimes you need to understand how your program interacts with the operating s
 
 [eBPF](https://ebpf.io/) (extended Berkeley Packet Filter) is a powerful Linux technology that allows running sandboxed programs in the kernel. [`bpftrace`](https://github.com/iovisor/bpftrace) provides a high-level syntax for writing eBPF programs. These are arbitrary programs running in the kernel, and thus have huge expressive power (though also a somewhat clumsy awk-like syntax). The most common use-case for them is to investigate what system calls are being invoked, including aggregations (like counts or latency statistics) or introspecting (or even filtering on) system call arguments.
 
-```
-# Trace file opens system-wide (prints immediately) sudo -e'tracepoint:syscalls:sys_enter_openat { printf("%s %s\n", comm, str(args->filename)); }'# Count system calls by name (prints summary on Ctrl-C) sudo -e'tracepoint:syscalls:sys_enter_* { @[probe] = count(); }'
+```bash
+# Trace file opens system-wide (prints immediately)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_openat { printf("%s %s\n", comm, str(args->filename)); }'
+
+# Count system calls by name (prints summary on Ctrl-C)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* { @[probe] = count(); }'
 ```
 
 However, you can also write eBPF programs directly in C using a toolchain like [`bcc`](https://github.com/iovisor/bcc), which also ships with [many handy tools](https://www.brendangregg.com/blog/2015-09-22/bcc-linux-4.3-tracing.html) like `biosnoop` for printing latency distributions for disk operations or `opensnoop` for printing all open files.
 
 Where `strace` is useful because it’s easy to “just get up and running”, `bpftrace` is what you should reach for when you need lower overhead, want to trace through kernel functions, need to do any kind of aggregation, etc. Note that `bpftrace` has to run as `root` though, and that it generally monitors the entire kernel, not just a particular process. To target a specific program, you can filter by command name or PID:
 
-```
-# Filter by command name (prints summary on Ctrl-C) sudo -e'tracepoint:syscalls:sys_enter_* /comm == "bash"/ { @[probe] = count(); }'# Trace a specific command from startup using -c (cpid = child PID) sudo -e'tracepoint:syscalls:sys_enter_* /pid == cpid/ { @[probe] = count(); }' -c'ls -la'
+```bash
+# Filter by command name (prints summary on Ctrl-C)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* /comm == "bash"/ { @[probe] = count(); }'
+
+# Trace a specific command from startup using -c (cpid = child PID)
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_* /pid == cpid/ { @[probe] = count(); }' -c 'ls -la'
 ```
 
 The `-c` flag runs the specified command and sets `cpid` to its PID, which is useful for tracing a program from the moment it starts. When the traced command exits, bpftrace prints the aggregated results.
@@ -125,8 +150,12 @@ The `-c` flag runs the specified command and sets `cpid` to its PID, which is us
 
 For network issues, [`tcpdump`](https://www.man7.org/linux/man-pages/man1/tcpdump.1.html) and [Wireshark](https://www.wireshark.org/) let you capture and analyze network packets:
 
-```
-# Capture packets on port 80 sudo -i # Capture and save to file for Wireshark analysis sudo -i -w
+```bash
+# Capture packets on port 80
+sudo tcpdump -i any port 80
+
+# Capture and save to file for Wireshark analysis
+sudo tcpdump -i any -w capture.pcap
 ```
 
 For HTTPS traffic, the encryption makes tcpdump less useful. Tools like [mitmproxy](https://mitmproxy.org/) can act as an intercepting proxy to inspect encrypted traffic. Browser developer tools (Network tab) are often the easiest way to debug HTTPS requests from web applications—they show decrypted request/response data, headers, and timing.
@@ -144,8 +173,10 @@ One approach to finding memory bugs is to use **sanitizers**, which are compiler
 * Use-after-return
 * Memory leaks
 
-```
-# Compile with AddressSanitizer -fsanitize = -g -o
+```bash
+# Compile with AddressSanitizer
+gcc -fsanitize=address -g program.c -o program
+./program
 ```
 
 There are a variety of useful sanitizers:
@@ -160,8 +191,8 @@ Sanitizers require recompilation but are fast enough to use in CI pipelines and 
 
 [Valgrind](https://valgrind.org/) instead runs your program in something akin to a virtual machine to detect memory errors. It’s slower than sanitizers but doesn’t require recompilation:
 
-```
---leak-check =
+```bash
+valgrind --leak-check=full ./my_program
 ```
 
 Use Valgrind when:
@@ -208,8 +239,11 @@ However, wall clock time can be misleading since your computer might be running 
 * **User** - Time spent in the CPU running user code
 * **Sys** - Time spent in the CPU running kernel code
 
-```
-$ time 
+```bash
+$ time curl https://missing.csail.mit.edu &> /dev/null
+real	0m0.272s
+user	0m0.079s
+sys	    0m0.028s
 ```
 
 Here the request took nearly 300 milliseconds (real time) but only 107ms of CPU time (user + sys). The rest was waiting for the network.
@@ -218,7 +252,7 @@ Here the request took nearly 300 milliseconds (real time) but only 107ms of CPU 
 
 Sometimes the first step towards analyzing the performance of your program is to understand what its actual resource consumption is. Programs often run slowly when they are resource constrained.
 
-* **General Monitoring**: [`htop`](https://htop.dev/) is an improved version of `top` that presents various statistics for currently running processes. Useful keybinds:  to sort processes, `t` to show tree hierarchy, `h` to toggle threads. There’s also [`btop`](https://github.com/aristocratos/btop) which monitors *way* more things.
+* **General Monitoring**: [`htop`](https://htop.dev/) is an improved version of `top` that presents various statistics for currently running processes. Useful keybinds: `<F6>` to sort processes, `t` to show tree hierarchy, `h` to toggle threads. There’s also [`btop`](https://github.com/aristocratos/btop) which monitors *way* more things.
 * **I/O Operations**: [`iotop`](https://www.man7.org/linux/man-pages/man8/iotop.8.html) displays live I/O usage information.
 * **Memory Usage**: [`free`](https://www.man7.org/linux/man-pages/man1/free.1.html) displays total free and used memory.
 * **Open Files**: [`lsof`](https://www.man7.org/linux/man-pages/man8/lsof.8.html) lists file information about files opened by processes. Useful for checking which process has opened a specific file.
@@ -233,8 +267,9 @@ Humans spot patterns in graphs much faster than in tables of numbers. When analy
 
 **Quick plotting with gnuplot**: For simple command-line plotting, [`gnuplot`](http://www.gnuplot.info/) can generate graphs directly from data files:
 
-```
-# Plot a simple CSV with timestamp,value -e"set datafile separator ','; plot 'latency.csv' using 1:2 with lines"
+```bash
+# Plot a simple CSV with timestamp,value
+gnuplot -e "set datafile separator ','; plot 'latency.csv' using 1:2 with lines"
 ```
 
 **Iterative exploration with matplotlib and ggplot2**: For deeper analysis, Python’s [`matplotlib`](https://matplotlib.org/) and R’s [`ggplot2`](https://ggplot2.tidyverse.org/) enable iterative exploration. Unlike one-off plotting, these tools let you quickly slice and transform data to investigate hypotheses. ggplot2’s facet plots are particularly powerful—you can split a single dataset across multiple subplots by category (e.g., faceting request latency by endpoint or time-of-day) to tease out patterns that would otherwise be hidden.
@@ -260,18 +295,35 @@ Sampling profilers have lower overhead and are generally preferred for productio
 
 `perf stat` gives you a quick overview of where time is spent:
 
-```
-$ stat for'./slow_program'# 0.998 CPUs utilized# 3.738 /sec# 0.000 /sec# 48.587 /sec# 3.845 GHz# 0.80 insn per cycle# 384.532 M/sec# 1.00% of all branches
+```bash
+$ perf stat ./slow_program
+
+ Performance counter stats for './slow_program':
+
+         3,210.45 msec task-clock                #    0.998 CPUs utilized
+               12      context-switches          #    3.738 /sec
+                0      cpu-migrations            #    0.000 /sec
+              156      page-faults               #   48.587 /sec
+   12,345,678,901      cycles                    #    3.845 GHz
+    9,876,543,210      instructions              #    0.80  insn per cycle
+    1,234,567,890      branches                  #  384.532 M/sec
+       12,345,678      branch-misses             #    1.00% of all branches
 ```
 
 Profiler output for real world programs will contain large amounts of information. Humans are visual creatures and are quite terrible at reading large amounts of numbers. [Flame graphs](https://www.brendangregg.com/flamegraphs.html) are a visualization that makes profiling data much easier to understand.
 
 A flame graph displays a hierarchy of function calls across the Y axis and time taken proportional to the X axis. They’re interactive—you can click to zoom into specific parts of the program.
 
+[![FlameGraph](https://www.brendangregg.com/FlameGraphs/cpu-bash-flamegraph.svg)](https://www.brendangregg.com/FlameGraphs/cpu-bash-flamegraph.svg)
+
 To generate a flame graph from `perf` data:
 
-```
-# Record profile -g# Generate flame graph (requires flamegraph scripts)>
+```bash
+# Record profile
+perf record -g ./my_program
+
+# Generate flame graph (requires flamegraph scripts)
+perf script | stackcollapse-perf.pl | flamegraph.pl > flamegraph.svg
 ```
 
 > Consider using [Speedscope](https://www.speedscope.app/) for an interactive web-based flame graph viewer, or [Perfetto](https://perfetto.dev/) for comprehensive system-level analysis.
@@ -280,8 +332,13 @@ To generate a flame graph from `perf` data:
 
 [`callgrind`](https://valgrind.org/docs/manual/cl-manual.html) is a profiling tool that records the call history and instruction counts of your program. Unlike sampling profilers, it provides exact call counts and can show the relationship between callers and callees:
 
-```
-# Run with callgrind --tool =# Analyze with callgrind_annotate (text) or kcachegrind (GUI)
+```bash
+# Run with callgrind
+valgrind --tool=callgrind ./my_program
+
+# Analyze with callgrind_annotate (text) or kcachegrind (GUI)
+callgrind_annotate callgrind.out.<pid>
+kcachegrind callgrind.out.<pid>
 ```
 
 Callgrind is slower than sampling profilers but provides precise call counts and can optionally simulate cache behavior (with `--cache-sim=yes`) if you need that information.
@@ -296,8 +353,9 @@ Memory profilers help you understand how your program uses memory over time and 
 
 [`massif`](https://valgrind.org/docs/manual/ms-manual.html) profiles heap memory usage:
 
-```
---tool =
+```bash
+valgrind --tool=massif ./my_program
+ms_print massif.out.<pid>
 ```
 
 This shows you heap usage over time, helping identify memory leaks and excessive allocation.
@@ -308,8 +366,19 @@ This shows you heap usage over time, helping identify memory leaks and excessive
 
 When you need to compare the performance of different implementations or tools, [`hyperfine`](https://github.com/sharkdp/hyperfine) is excellent for benchmarking command-line programs:
 
-```
-$ --warmup'fd -e jpg''find . -iname "*.jpg"'#1: fd -e jpg()[()#2: find . -iname "*.jpg"()[()'fd -e jpg' times 'find . -iname "*.jpg"'
+```bash
+$ hyperfine --warmup 3 'fd -e jpg' 'find . -iname "*.jpg"'
+Benchmark #1: fd -e jpg
+  Time (mean ± σ):      51.4 ms ±   2.9 ms    [User: 121.0 ms, System: 160.5 ms]
+  Range (min … max):    44.2 ms …  60.1 ms    56 runs
+
+Benchmark #2: find . -iname "*.jpg"
+  Time (mean ± σ):      1.126 s ±  0.101 s    [User: 141.1 ms, System: 956.1 ms]
+  Range (min … max):    0.975 s …  1.287 s    10 runs
+
+Summary
+  'fd -e jpg' ran
+   21.89 ± 2.33 times faster than 'find . -iname "*.jpg"'
 ```
 
 > For web development, browser developer tools include excellent profilers. See the [Firefox Profiler](https://profiler.firefox.com/docs/) and [Chrome DevTools](https://developers.google.com/web/tools/chrome-devtools/rendering-tools) documentation.
@@ -321,21 +390,100 @@ $ --warmup'fd -e jpg''find . -iname "*.jpg"'#1: fd -e jpg()[()#2: find . -iname 
 1. **Debug a sorting algorithm**: The following pseudocode implements merge sort but contains a bug. Implement it in a language of your choice, then use a debugger (gdb, lldb, pdb, or your IDE’s debugger) to find and fix the bug.
 
    ```
-   function merge_sort(arr): if length(arr) <= 1: return arr mid = length(arr) / 2 left = merge_sort(arr[0..mid]) right = merge_sort(arr[mid..end]) return merge(left, right) function merge(left, right): result = [] i = 0, j = 0 while i < length(left) AND j < length(right): if left[i] <= right[j]: append result, left[i] i = i + 1 else: append result, right[i] j = j + 1 append remaining elements from left and right return result 
+   function merge_sort(arr):
+       if length(arr) <= 1:
+           return arr
+       mid = length(arr) / 2
+       left = merge_sort(arr[0..mid])
+       right = merge_sort(arr[mid..end])
+       return merge(left, right)
+
+   function merge(left, right):
+       result = []
+       i = 0, j = 0
+       while i < length(left) AND j < length(right):
+           if left[i] <= right[j]:
+               append result, left[i]
+               i = i + 1
+           else:
+               append result, right[i]
+               j = j + 1
+       append remaining elements from left and right
+       return result
    ```
 
    Test vector: `merge_sort([3, 1, 4, 1, 5, 9, 2, 6])` should return `[1, 1, 2, 3, 4, 5, 6, 9]`. Use breakpoints and step through the merge function to find where the incorrect element is being selected.
 2. Install [`rr`](https://rr-project.org/) and use reverse debugging to find a corruption bug. Save this program as `corruption.c`:
 
-   ```
-   #include  typedef struct{int id; int scores[3];} Student; Student students[2]; void init(){students[0]. id = 1001; students[0]. scores[0] = 85; students[0]. scores[1] = 92; students[0]. scores[2] = 78; students[1]. id = 1002; students[1]. scores[0] = 90; students[1]. scores[1] = 88; students[1]. scores[2] = 95;} void curve_scores(int student_idx, int curve){for(int i = 0; i< 4; i ++){students[student_idx]. scores[i] += curve;}} int main(){init(); printf("=== Initial state === \n "); printf("Student 0: id=%d \n ", students[0]. id); printf("Student 1: id=%d \n ", students[1]. id); curve_scores(0, 5); printf(" \n === After curving === \n "); printf("Student 0: id=%d \n ", students[0]. id); printf("Student 1: id=%d \n ", students[1]. id); if(students[1]. id!= 1002){printf(" \nERROR: Student 1's ID was corrupted! Expected 1002, got %d \n ", students[1]. id); return 1;} return 0;}
+   ```c
+   #include <stdio.h>
+
+   typedef struct {
+       int id;
+       int scores[3];
+   } Student;
+
+   Student students[2];
+
+   void init() {
+       students[0].id = 1001;
+       students[0].scores[0] = 85;
+       students[0].scores[1] = 92;
+       students[0].scores[2] = 78;
+
+       students[1].id = 1002;
+       students[1].scores[0] = 90;
+       students[1].scores[1] = 88;
+       students[1].scores[2] = 95;
+   }
+
+   void curve_scores(int student_idx, int curve) {
+       for (int i = 0; i < 4; i++) {
+           students[student_idx].scores[i] += curve;
+       }
+   }
+
+   int main() {
+       init();
+       printf("=== Initial state ===\n");
+       printf("Student 0: id=%d\n", students[0].id);
+       printf("Student 1: id=%d\n", students[1].id);
+
+       curve_scores(0, 5);
+
+       printf("\n=== After curving ===\n");
+       printf("Student 0: id=%d\n", students[0].id);
+       printf("Student 1: id=%d\n", students[1].id);
+
+       if (students[1].id != 1002) {
+           printf("\nERROR: Student 1's ID was corrupted! Expected 1002, got %d\n",
+                  students[1].id);
+           return 1;
+       }
+       return 0;
+   }
    ```
 
    Compile with `gcc -g corruption.c -o corruption` and run it. Student 1’s ID gets corrupted, but the corruption happens in a function that only touches student 0. Use `rr record ./corruption` and `rr replay` to find the culprit. Set a watchpoint on `students[1].id` and use `reverse-continue` after the corruption to find exactly which line of code overwrote it.
 3. Debug a memory error with AddressSanitizer. Save this as `uaf.c`:
 
-   ```
-   #include  #include  #include  int main(){char* greeting = malloc(32); strcpy(greeting,"Hello, world!"); printf("%s \n ", greeting); free(greeting); greeting[0] = 'J'; printf("%s \n ", greeting); return 0;}
+   ```c
+   #include <stdlib.h>
+   #include <string.h>
+   #include <stdio.h>
+
+   int main() {
+       char *greeting = malloc(32);
+       strcpy(greeting, "Hello, world!");
+       printf("%s\n", greeting);
+
+       free(greeting);
+
+       greeting[0] = 'J';
+       printf("%s\n", greeting);
+
+       return 0;
+   }
    ```
 
    First compile and run without sanitizers: `gcc uaf.c -o uaf && ./uaf`. It may appear to work. Now compile with AddressSanitizer: `gcc -fsanitize=address -g uaf.c -o uaf && ./uaf`. Read the error report. What bug does ASan find? Fix the issue it identifies.
@@ -347,14 +495,34 @@ $ --warmup'fd -e jpg''find . -iname "*.jpg"'#1: fd -e jpg()[()#2: find . -iname 
 1. Use `perf stat` to get basic performance statistics for a program of your choice. What do the different counters mean?
 2. Profile with `perf record`. Save this as `slow.c`:
 
-   ```
-   #include  #include  double slow_computation(int n){double result = 0; for(int i = 0; i< n; i ++){for(int j = 0; j< 1000; j ++){result += sin(i* j)* cos(i + j);}} return result;} int main(){double r = 0; for(int i = 0; i< 100; i ++){r += slow_computation(1000);} printf("Result: %f \n ", r); return 0;}
+   ```c
+   #include <math.h>
+   #include <stdio.h>
+
+   double slow_computation(int n) {
+       double result = 0;
+       for (int i = 0; i < n; i++) {
+           for (int j = 0; j < 1000; j++) {
+               result += sin(i * j) * cos(i + j);
+           }
+       }
+       return result;
+   }
+
+   int main() {
+       double r = 0;
+       for (int i = 0; i < 100; i++) {
+           r += slow_computation(1000);
+       }
+       printf("Result: %f\n", r);
+       return 0;
+   }
    ```
 
    Compile with debug symbols: `gcc -g -O2 slow.c -o slow -lm`. Run `perf record -g ./slow`, then `perf report` to see where time is spent. Try generating a flame graph using the flamegraph scripts.
 3. Use `hyperfine` to benchmark two different implementations of the same task (e.g., `find` vs `fd`, `grep` vs `ripgrep`, or two versions of your own code).
 4. Use `htop` to monitor your system while running a resource-intensive program. Try using `taskset` to limit which CPUs a process can use: `taskset --cpu-list 0,2 stress -c 3`. Why doesn’t `stress` use three CPUs?
-5. A common issue is that a port you want to listen on is already taken by another process. Learn how to discover that process: First execute `python -m http.server 4444` to start a minimal web server on port 4444. On a separate terminal run `ss -tlnp | grep 4444` to find the process. Terminate it with `kill` .
+5. A common issue is that a port you want to listen on is already taken by another process. Learn how to discover that process: First execute `python -m http.server 4444` to start a minimal web server on port 4444. On a separate terminal run `ss -tlnp | grep 4444` to find the process. Terminate it with `kill <PID>`.
 
 ---
 

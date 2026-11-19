@@ -52,20 +52,23 @@ Shell 不只是（通常）比“到处点击”快得多，它还具备一种�
 
 当你启动终端时，你会看到一个*提示符*，它通常长这样：
 
-```
-missing:~$  
+```console
+missing:~$
 ```
 
 这是与 Shell 交互的主文本界面。它告诉你当前所在的机器是 `missing`，而你的“当前工作目录”（current working directory，也就是你此刻所处的位置）是 `~`（“home” 的缩写）。`$` 表示你不是 root 用户（稍后会详述）。在这个提示符处，你可以输入一条*命令*，随后由 Shell 来解释执行。最基本的命令就是运行一个程序：
 
-```
-missing:~$  dateFri 10 Jan 2020 11:49:31 AM EST missing:~$  
+```console
+missing:~$ date
+Fri 10 Jan 2020 11:49:31 AM EST
+missing:~$
 ```
 
 这里我们运行了 `date` 程序，它（也许并不意外）会打印当前的日期和时间。接着 Shell 会请你输入下一条命令。我们也可以在执行命令时附带*参数*（arguments）：
 
-```
-missing:~$  echo hello 
+```console
+missing:~$ echo hello
+hello
 ```
 
 在这个例子中，我们让 Shell 以参数 `hello` 运行程序 `echo`。`echo` 程序的作用很简单，就是把它的参数打印出来。Shell 通过按空白字符分割来解析命令，然后运行第一个词所指代的程序，并把之后的每个词都作为程序可访问的参数传给它。如果你想提供包含空格或其他特殊字符的参数（例如名为 “My Photos” 的目录），可以用 `'` 或 `"` 把参数括起来（`"My Photos"`），或者只用 `\` 转义相关的字符（`My\ Photos`）。
@@ -76,24 +79,31 @@ missing:~$  echo hello
 
 在 `man` 之后，最需要学习的命令是 `cd`，即 “change directory”（切换目录）。这条命令实际上是内置于 Shell 之中的，并不是一个独立的程序（也就是说，`which cd` 会回答 “no cd found”）。你给它传一个路径（path），该路径就会成为你的当前工作目录。你还会看到工作目录反映在 Shell 提示符中：
 
-```
-missing:~$  cdmissing:/bin$  cdmissing:/$  cdmissing:~$  
+```console
+missing:~$ cd /bin
+missing:/bin$ cd /
+missing:/$ cd ~
+missing:~$
 ```
 
-> 注意，Shell 自带自动补全功能，所以通常只需按 ! 键就能更快地补全路径。
+> 注意，Shell 自带自动补全功能，所以通常只需按 `<TAB>` 键就能更快地补全路径。
 
 许多命令在没有特别指定时都会作用于当前工作目录。如果你不确定自己身在何处，可以运行 `pwd` 或打印 `$PWD` 环境变量（用 `echo $PWD`），两者都会给出当前工作目录。
 
 当前工作目录还有一个便利之处：它让我们可以使用*相对*路径（relative paths）。到目前为止我们见过的路径都是*绝对*路径（absolute paths）——它们以 `/` 开头，给出从文件系统根目录（`/`）出发到达某个位置所需的完整目录序列。在实际使用中，你更常用的会是相对路径；之所以叫相对路径，是因为它们是相对于当前工作目录而言的。在相对路径（任何*不*以 `/` 开头的路径）中，第一个路径组成部分会在当前工作目录下查找，后续组成部分则照常逐级深入。例如：
 
-```
-missing:~$  cdmissing:/$  cd missing:/bin$  
+```console
+missing:~$ cd /
+missing:/$ cd bin
+missing:/bin$
 ```
 
 每个目录中还存在两个“特殊”的组成部分：`.` 和 `..`。`.` 表示“当前目录”，`..` 表示“上一级目录”（父目录）。所以：
 
-```
-missing:~$  cdmissing:/$  cd missing:/$  
+```console
+missing:~$ cd /
+missing:/$ cd bin/../bin/../bin/././../bin/..
+missing:/$
 ```
 
 对于任何命令的参数，你通常都可以互换地使用绝对路径和相对路径；只是在使用相对路径时，务必清楚自己的当前工作目录是什么！
@@ -104,16 +114,21 @@ missing:~$  cdmissing:/$  cd missing:/$
 
 但是 Shell 是怎么知道去哪里找 `date` 或 `echo` 这样的程序的呢？当 Shell 被要求执行一条命令时，它会查阅一个名为 `$PATH` 的*环境变量*（environment variable），其中列出了 Shell 在接到命令时应当搜索程序的目录：
 
-```
-missing:~$  echo $PATH/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin missing:~$  echo/bin/echo missing:~$  $PATH/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin 
+```console
+missing:~$ echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+missing:~$ which echo
+/bin/echo
+missing:~$ /bin/echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ```
 
 当我们运行 `echo` 命令时，Shell 知道它应该执行程序 `echo`，于是沿着 `$PATH` 中以 `:` 分隔的目录列表逐个查找同名文件。找到之后就运行它（前提是该文件是*可执行*的；稍后详述）。我们可以用 `which` 程序来查明给定程序名实际执行的是哪个文件。我们也可以完全绕过 `$PATH`，直接给出想要执行的文件的*路径*。
 
 这也给了我们一条线索，让我们可以确定在 Shell 中能够执行的*所有*程序：列出 `$PATH` 中所有目录的内容即可。我们可以把某个目录路径传给列出文件的 `ls` 程序来做到这一点：
 
-```
-missing:~$  ls
+```console
+missing:~$ ls /bin
 ```
 
 > 建议安装并使用 [`eza`](https://eza.rocks/)，它是一个对人更友好的 `ls`。
@@ -133,28 +148,28 @@ missing:~$  ls
 
 还有一些接口略微复杂但非常有用的工具。其中首推 `sed`，它是一个可编程的文件编辑器。它有自己的编程语言，用于对文件做自动化修改，但它最常见的用法是：
 
-```
-missing:~$  sed -i's/pattern/replacement/g'
+```console
+missing:~$ sed -i 's/pattern/replacement/g' file
 ```
 
 这会把 `file` 中所有 `pattern` 出现的地方替换为 `replacement`。`-i` 表示我们希望就地（inline）完成替换（而不是保持 `file` 不变、只把替换后的内容打印出来）。`s/` 是 sed 编程语言中表示我们要做一次替换（substitution）的写法。`/` 用来分隔模式和替换文本。结尾的 `/g` 表示我们要替换每一行上的*所有*匹配，而不只是第一个。和 `grep` 一样，这里的 `pattern` 是正则表达式，这给了你很强的表达能力。正则表达式替换还允许 `replacement` 回引用（back-reference）匹配到的模式中的某些部分；我们马上就会看到一个例子。
 
 接下来是 `find`，它让你（递归地）查找满足某些条件的文件。例如：
 
-```
-missing:~$  -type -name"*.zip" -mtime
+```console
+missing:~$ find ~/Downloads -type f -name "*.zip" -mtime +30
 ```
 
 在下载目录中查找超过 30 天未修改的 ZIP 文件。
 
-```
-missing:~$  -type -size -exec ls -lh{}\;
+```console
+missing:~$ find ~ -type f -size +100M -exec ls -lh {} \;
 ```
 
 在你的主目录中查找大于 100M 的文件并列出它们。注意 `-exec` 接受一个以单独的 `;` 结尾的*命令*（这个 `;` 需要转义，和空格的情况很像），其中的 `{}` 会被 `find` 替换为每个匹配到的文件路径。
 
-```
-missing:~$  . -name"*.py" -exec grep -l "TODO"{}\;
+```console
+missing:~$ find . -name "*.py" -exec grep -l "TODO" {} \;
 ```
 
 查找其中含有 TODO 事项的所有 `.py` 文件。
@@ -165,16 +180,21 @@ missing:~$  . -name"*.py" -exec grep -l "TODO"{}\;
 
 下一个登场的是 `awk`，它和 `sed` 一样拥有自己的编程语言。`sed` 是为编辑文件而生的，而 `awk` 是为解析文件而生的。`awk` 最常见的用途，是处理语法规整的数据文件（比如 CSV 文件），从每条记录（即每一行）中只抽取你需要的某些部分：
 
-```
-missing:~$  awk'{print $2}'
+```console
+missing:~$ awk '{print $2}' file
 ```
 
 打印 `file` 每一行中以空白分隔的第二列。如果加上 `-F,`，它就会打印每行中以逗号分隔的第二列。`awk` 还能做多得多的事情——过滤行、计算聚合值等等——可以看看练习，尝尝鲜。
 
 把这些工具组合起来，我们就能玩出这样的花样：
 
-```
-missing:~$  'journalctl -u sshd -b-1 | grep "Disconnected from"' \ | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\1/' \ | sort | uniq -c \ | sort -nk1,1 | tail -n10 \  | awk '{print $}' | paste -sd, postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root 
+```console
+missing:~$ ssh myserver 'journalctl -u sshd -b-1 | grep "Disconnected from"' \
+  | sed -E 's/.*Disconnected from .* user (.*) [^ ]+ port.*/\1/' \
+  | sort | uniq -c \
+  | sort -nk1,1 | tail -n10 \
+  | awk '{print $2}' | paste -sd,
+postgres,mysql,oracle,dell,ubuntu,inspur,test,admin,user,root
 ```
 
 这条命令从一台远程服务器抓取 SSH 日志（关于 `ssh` 我们会在下一讲详细讨论），搜索断开连接的消息，从每条这样的消息中提取用户名，然后以逗号分隔打印出出现次数最多的前 10 个用户名。全都在一条命令里完成！把每一步拆解开留作练习。
@@ -185,7 +205,7 @@ missing:~$  'journalctl -u sshd -b-1 | grep "Disconnected from"' \ | sed -E 's/.
 
 事实上，大多数 Shell（比如 bash）都实现了完整的编程语言，就像 Python 或 Ruby 一样。它有变量、条件语句、循环和函数。你在 Shell 里运行命令时，其实就是在写一小段由 Shell 解释执行的代码。今天我们不会教你 bash 的全部内容，但有一些东西你会发现特别有用：
 
-首先是重定向（redirect）：`>file` 让你把程序的标准输出写入 `file`，而不是打到终端上。这便于事后分析。`>>file` 会追加到 `file` 末尾而不是覆盖它。此外还有 `告诉 Shell 从文件而不是你的键盘读取内容，作为某个程序的标准输入。`
+首先是重定向（redirect）：`>file` 让你把程序的标准输出写入 `file`，而不是打到终端上。这便于事后分析。`>>file` 会追加到 `file` 末尾而不是覆盖它。此外还有 `<file`，它告诉 Shell 从 `file` 而不是你的键盘读取内容，作为某个程序的标准输入。
 
 > 这里正好提一下 `tee` 程序。`tee` 会把标准输入打印到标准输出（就像 `cat` 一样！），但*同时*还会把它写入一个文件。所以 `verbose cmd | tee verbose.log | grep CRITICAL` 既能把完整的详细日志保存到文件，又能保持终端清爽！
 
@@ -193,16 +213,39 @@ missing:~$  'journalctl -u sshd -b-1 | grep "Disconnected from"' \ | sed -E 's/.
 
 Bash 还有两种形式的循环：`while` 和 `for`。`while command1; do command2; command3; done` 的工作方式与对应的 `if` 命令完全一样，只不过只要 `command1` 不出错，它就会一遍又一遍地重新执行整个循环体。`for varname in a b c d; do command; done` 会执行 `command` 四次，每次把 `$varname` 分别设为 `a`、`b`、`c`、`d` 其中之一。除了显式列出这些项，你更常用的会是“命令替换”（command substitution），比如：
 
-```
-for in$(seq ); do
+```bash
+for i in $(seq 1 10); do
 ```
 
-这会执行命令 `seq 1 10`（它打印从 1 到 10 的所有整数），然后用该命令的输出替换整个 `$()`，从而得到一个迭代 10 次的 for 循环。在较老的代码里，你有时会看到用字面的反引号（比如 `for i in `seq 1 10`; do`）来代替 `$()`，但你应该强烈倾向于使用 `$()` 形式，因为它可以嵌套。
+这会执行命令 `seq 1 10`（它打印从 1 到 10 的所有整数），然后用该命令的输出替换整个 `$()`，从而得到一个迭代 10 次的 for 循环。在较老的代码里，你有时会看到用字面的反引号（比如 ``for i in `seq 1 10`; do``）来代替 `$()`，但你应该强烈倾向于使用 `$()` 形式，因为它可以嵌套。
 
 虽然你*可以*直接在提示符处写很长的 Shell 脚本，但你通常会想把它们写进一个 `.sh` 文件。例如，下面这个脚本会循环运行某个程序直到它失败为止，只打印失败那一次的输出，同时在后台让 CPU 保持满负荷（比如用来复现不稳定的测试就很有用）：
 
-```
-#!/bin/bash set -euo # Start CPU stress in background --cpu STRESS_PID =$! # Setup log file LOGFILE = "test_runs_$(date).log" echo "Logging to $LOGFILE " # Run tests until one fails RUN = while test > " $LOGFILE "; do echo "Run $RUN  passed"(()) done # Cleanup and report kill $STRESS_PID echo "Test failed on run $RUN " echo"Last 20 lines of output:" tail -n " $LOGFILE " echo"Full log: $LOGFILE "
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Start CPU stress in background
+stress --cpu 8 &
+STRESS_PID=$!
+
+# Setup log file
+LOGFILE="test_runs_$(date +%s).log"
+echo "Logging to $LOGFILE"
+
+# Run tests until one fails
+RUN=1
+while cargo test my_test > "$LOGFILE" 2>&1; do
+    echo "Run $RUN passed"
+    ((RUN++))
+done
+
+# Cleanup and report
+kill $STRESS_PID
+echo "Test failed on run $RUN"
+echo "Last 20 lines of output:"
+tail -n 20 "$LOGFILE"
+echo "Full log: $LOGFILE"
 ```
 
 这里面有不少新东西，我建议你花点时间仔细研究，因为它们在编写有用的 Shell 命令时非常实用，比如用后台任务（`&`）并发运行程序、更巧妙的 [Shell 重定向](https://www.gnu.org/software/bash/manual/html_node/Redirections.html)，以及[算术展开](https://www.gnu.org/software/bash/manual/html_node/Arithmetic-Expansion.html)。

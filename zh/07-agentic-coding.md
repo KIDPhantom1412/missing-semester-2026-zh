@@ -4,14 +4,25 @@
 
 本讲建立在[开发环境与工具](/2026/development-environment/)一讲中 AI 辅助开发相关内容的基础上。作为一个快速演示，让我们继续使用 [AI 辅助开发](/2026/development-environment/#ai-powered-development)小节中的例子：
 
-```
-fromurllib.request import urlopen def download_contents(url: str) -> str: with urlopen(url) as response: return response. read(). decode('utf-8') def extract(content: str) -> list[str]: import re pattern = r'\[.*?\]\((.*?)\)' return re. findall(pattern, content) print(extract(download_contents("https://raw.githubusercontent.com/missing-semester/missing-semester/refs/heads/master/_2026/development-environment.md")))
+```python
+from urllib.request import urlopen
+
+def download_contents(url: str) -> str:
+    with urlopen(url) as response:
+        return response.read().decode('utf-8')
+
+def extract(content: str) -> list[str]:
+    import re
+    pattern = r'\[.*?\]\((.*?)\)'
+    return re.findall(pattern, content)
+
+print(extract(download_contents("https://raw.githubusercontent.com/missing-semester/missing-semester/refs/heads/master/_2026/development-environment.md")))
 ```
 
 我们可以尝试用下面这个任务来提示（prompt）编码智能体：
 
 ```
-Turn this into a proper command-line program, with argparse for argument parsing. Add type annotations, and make sure the program passes type checking. 
+Turn this into a proper command-line program, with argparse for argument parsing. Add type annotations, and make sure the program passes type checking.
 ```
 
 智能体会先读取文件以理解它，然后做一些修改，最后调用类型检查器来确保类型注解是正确的。如果它犯了错导致类型检查不通过，它很可能会自行迭代修正——不过这个任务比较简单，这种情况不太可能发生。由于编码智能体能够使用可能造成危害的工具，默认情况下，智能体运行框架（agent harness）会在工具调用前提示用户确认。
@@ -72,7 +83,7 @@ Turn this into a proper command-line program, with argparse for argument parsing
 对于许多需要编写提示词的进阶功能（例如技能或子智能体），你可以借助 LLM 来起步。有些编码智能体甚至内置了对此的支持。例如，Claude Code 可以从一段简短的提示词生成一个子智能体（调用 `/agents` 并创建一个新智能体）。试着用下面这段提示词创建一个子智能体：
 
 ```
-A Python code checking agent that uses `mypy` and `ruff` to type-check, lint, and format *check* any files that have been modified from the last git commit. 
+A Python code checking agent that uses `mypy` and `ruff` to type-check, lint, and format *check* any files that have been modified from the last git commit.
 ```
 
 然后，你可以用顶层智能体通过类似“use the code checker subagent”的消息显式调用该子智能体。你也可能让顶层智能体在合适的时候自动调用子智能体，例如在修改了任何 Python 文件之后。

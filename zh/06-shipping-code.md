@@ -21,14 +21,20 @@
 
 在现代软件开发中，抽象层无处不在。程序自然地把逻辑分派给其他库或服务。然而，这会在你的程序和它正常运行所需的库之间引入一种 *依赖*（dependency）关系。例如，在 Python 中，要获取一个网站的内容，我们通常这样做：
 
-```
-import requests response = requests. get("https://missing.csail.mit.edu")
+```python
+import requests
+
+response = requests.get("https://missing.csail.mit.edu")
 ```
 
 然而 `requests` 库并不随 Python 运行时捆绑发布，所以如果我们没有安装 `requests` 就尝试运行这段代码，Python 会抛出错误：
 
-```
-$  Traceback (most recent call last):  File "fetch.py", line 1, in   import requests ModuleNotFoundError: No module named 'requests' 
+```console
+$ python fetch.py
+Traceback (most recent call last):
+  File "fetch.py", line 1, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
 ```
 
 为了能使用这个库，我们需要先运行 `pip install requests` 来安装它。`pip` 是 Python 编程语言提供的用于安装包的命令行工具。执行 `pip install requests` 会依次产生以下动作：
@@ -38,14 +44,30 @@ $  Traceback (most recent call last):  File "fetch.py", line 1, in   import requ
 3. 解析依赖 —— `requests` 库本身还依赖其他包，因此安装器必须找到所有传递依赖（transitive dependency）的兼容版本并提前安装它们
 4. 下载构建产物，然后解包并将文件复制到我们文件系统中正确的位置
 
-```
-$  install Collecting requests Downloading requests-2.32.3-py3-none-any.whl (64 kB) Collecting charset-normalizer<4,> = Downloading charset_normalizer-3.4.0-cp311-cp311-manylinux_x86_64.whl (142 kB) Collecting idna<4,> = Downloading idna-3.10-py3-none-any.whl (70 kB) Collecting urllib3<3,> = Downloading urllib3-2.2.3-py3-none-any.whl (126 kB) Collecting certifi> = Downloading certifi-2024.8.30-py3-none-any.whl (167 kB) Installing collected packages: urllib3, idna, charset-normalizer, certifi, requests Successfully installed certifi-2024.8.30 charset-normalizer-3.4.0 idna-3.10 requests-2.32.3 urllib3-2.2.3 
+```console
+$ pip install requests
+Collecting requests
+  Downloading requests-2.32.3-py3-none-any.whl (64 kB)
+Collecting charset-normalizer<4,>=2
+  Downloading charset_normalizer-3.4.0-cp311-cp311-manylinux_x86_64.whl (142 kB)
+Collecting idna<4,>=2.5
+  Downloading idna-3.10-py3-none-any.whl (70 kB)
+Collecting urllib3<3,>=1.21.1
+  Downloading urllib3-2.2.3-py3-none-any.whl (126 kB)
+Collecting certifi>=2017.4.17
+  Downloading certifi-2024.8.30-py3-none-any.whl (167 kB)
+Installing collected packages: urllib3, idna, charset-normalizer, certifi, requests
+Successfully installed certifi-2024.8.30 charset-normalizer-3.4.0 idna-3.10 requests-2.32.3 urllib3-2.2.3
 ```
 
 这里可以看到 `requests` 有自己的依赖，例如 `certifi` 或 `charset-normalizer`，而且必须先安装它们才能安装 `requests`。安装完成后，Python 运行时在导入时就能找到这个库。
 
-```
-$  -c'import requests; print(requests.__path__)'['/usr/local/lib/python3.11/dist-packages/requests'] $  grep requests 2.32.3 
+```console
+$ python -c 'import requests; print(requests.__path__)'
+['/usr/local/lib/python3.11/dist-packages/requests']
+
+$ pip list | grep requests
+requests        2.32.3
 ```
 
 各种编程语言有不同的工具、约定和实践来安装和发布库。在某些语言（如 Rust）中，工具链是统一的 —— `cargo` 负责构建、测试、依赖管理和发布。在另一些语言（如 Python）中，统一发生在规范层面 —— 不是由单一工具统一，而是有标准化的规范定义打包如何工作，从而每个环节都有多个相互竞争的工具（`pip` vs [`uv`](https://docs.astral.sh/uv/)，`setuptools` vs [`hatch`](https://hatch.pypa.io/) vs [`poetry`](https://python-poetry.org/)）。而在像 LaTeX 这样的生态系统中，TeX Live 或 MacTeX 等发行版捆绑预装了成千上万个包。
@@ -54,8 +76,24 @@ $  -c'import requests; print(requests.__path__)'['/usr/local/lib/python3.11/dist
 
 这种多个包对共享依赖要求互相不兼容版本的情况，通常被称为 *依赖地狱*（dependency hell）。应对冲突的一种方法是把每个程序的依赖隔离到各自的 *环境*（environment）中。在 Python 中，我们通过运行以下命令创建虚拟环境：
 
-```
-$  /usr/bin/python $  pwd/home/missingsemester $  -m $  source $  /home/missingsemester/venv/bin/python $  /home/missingsemester/venv/bin/pip $  -c'import requests; print(requests.__path__)'['/home/missingsemester/venv/lib/python3.11/site-packages/requests'] $  Package Version ------- ------- pip 24.0 
+```console
+$ which python
+/usr/bin/python
+$ pwd
+/home/missingsemester
+$ python -m venv venv
+$ source venv/bin/activate
+$ which python
+/home/missingsemester/venv/bin/python
+$ which pip
+/home/missingsemester/venv/bin/pip
+$ python -c 'import requests; print(requests.__path__)'
+['/home/missingsemester/venv/lib/python3.11/site-packages/requests']
+
+$ pip list
+Package Version
+------- -------
+pip     24.0
 ```
 
 你可以把环境想象成一个完整的、独立的语言运行时版本，带有自己的一组已安装的包。这种虚拟环境（virtual environment，venv）将已安装的依赖与全局 Python 安装隔离开来。最佳实践是为每个项目建立一个虚拟环境，包含它所需要的依赖。
@@ -66,16 +104,36 @@ $  /usr/bin/python $  pwd/home/missingsemester $  -m $  source $  /home/missings
 
 用 `uv` 代替 `pip` 遵循相同的接口，但速度要快得多：
 
-```
-$  install Resolved 5 packages in 12ms Prepared 5 packages in 0.45ms Installed 5 packages in 8ms + certifi==2024.8.30 + charset-normalizer==3.4.0 + idna==3.10 + requests==2.32.3 + urllib3==2.2.3 
+```console
+$ uv pip install requests
+Resolved 5 packages in 12ms
+Prepared 5 packages in 0.45ms
+Installed 5 packages in 8ms
+ + certifi==2024.8.30
+ + charset-normalizer==3.4.0
+ + idna==3.10
+ + requests==2.32.3
+ + urllib3==2.2.3
 ```
 
 > 我们强烈建议尽可能使用 `uv pip` 代替 `pip`，因为它能极大地缩短安装时间。
 
 除了依赖隔离之外，环境还允许你使用不同版本的编程语言运行时。
 
-```
-$  --pythonUsing CPython 3.12.7 Creating virtual environment at: venv312 $  source && --versionPython 3.12.7 $  --pythonUsing CPython 3.11.10 Creating virtual environment at: venv311 $  source && --versionPython 3.11.10 
+```console
+$ uv venv --python 3.12 venv312
+Using CPython 3.12.7
+Creating virtual environment at: venv312
+
+$ source venv312/bin/activate && python --version
+Python 3.12.7
+
+$ uv venv --python 3.11 venv311
+Using CPython 3.11.10
+Creating virtual environment at: venv311
+
+$ source venv311/bin/activate && python --version
+Python 3.11.10
 ```
 
 当你需要在多个 Python 版本上测试代码，或者某个项目要求特定版本时，这很有帮助。
@@ -86,8 +144,17 @@ $  --pythonUsing CPython 3.12.7 Creating virtual environment at: venv312 $  sour
 
 在软件开发中，我们区分源代码和构建产物。开发者编写和阅读源代码，而构建产物是由源代码产生的打包好的、可分发的输出 —— 随时可以安装或部署。构建产物可以简单到一个我们要运行的代码文件，也可以复杂到包含应用程序所需全部零零碎碎的整个虚拟机。看这个例子，当前目录下有一个 Python 文件 `greet.py`：
 
-```
-$  cat def greet(name): print(f"Hello, {name}!") $  -c"from greet import greet; greet('World')"Hello, World! $  cd $  -c"from greet import greet; greet('World')"ModuleNotFoundError: No module named 'greet' 
+```console
+$ cat greet.py
+def greet(name):
+    print(f"Hello, {name}!")
+
+$ python -c "from greet import greet; greet('World')"
+Hello, World!
+
+$ cd /tmp
+$ python -c "from greet import greet; greet('World')"
+ModuleNotFoundError: No module named 'greet'
 ```
 
 一旦切换到其他目录，导入就会失败，因为 Python 只在特定位置搜索模块（当前目录、已安装的包，以及 `PYTHONPATH` 中的路径）。打包通过把代码安装到已知位置来解决这个问题。
@@ -98,36 +165,79 @@ $  cat def greet(name): print(f"Hello, {name}!") $  -c"from greet import greet; 
 
 下面是一个同时提供命令行工具的库的最小化 `pyproject.toml`：
 
-```
-[project] name = "greeting" version ="0.1.0" description = "A simple greeting library" dependencies =["typer>=0.9"][project.scripts] greet ="greeting:cli"[build-system] requires =["setuptools>=61.0"]build-backend ="setuptools.build_meta"
+```toml
+[project]
+name = "greeting"
+version = "0.1.0"
+description = "A simple greeting library"
+dependencies = ["typer>=0.9"]
+
+[project.scripts]
+greet = "greeting:cli"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 ```
 
 `typer` 库是一个流行的 Python 包，能以极少的样板代码创建命令行界面。
 
 以及对应的 `greeting.py`：
 
-```
-import typer def greet(name: str) -> None: print(f"Hello, {name}!") def cli() -> None: typer. run(greet) if __name__ == "__main__": cli()
+```python
+import typer
+
+
+def greet(name: str) -> None:
+    print(f"Hello, {name}!")
+
+
+def cli() -> None:
+    typer.run(greet)
+
+
+if __name__ == "__main__":
+    cli()
 ```
 
 有了这个文件，我们现在就可以构建 wheel 包：
 
-```
-$  Building source distribution... Building wheel from source distribution... Successfully built dist/greeting-0.1.0.tar.gz Successfully built dist/greeting-0.1.0-py3-none-any.whl $  ls greeting-0.1.0-py3-none-any.whl greeting-0.1.0.tar.gz 
+```console
+$ uv build
+Building source distribution...
+Building wheel from source distribution...
+Successfully built dist/greeting-0.1.0.tar.gz
+Successfully built dist/greeting-0.1.0-py3-none-any.whl
+
+$ ls dist/
+greeting-0.1.0-py3-none-any.whl
+greeting-0.1.0.tar.gz
 ```
 
 `.whl` 文件就是 wheel 包（一种具有特定结构的 zip 归档），`.tar.gz` 是供需要从源代码构建的系统使用的源代码发行版（source distribution）。
 
 你可以检查 wheel 包的内容，看看里面打包了什么：
 
-```
-$  -lArchive: dist/greeting-0.1.0-py3-none-any.whl Length Date Time Name --------- ---------- ----- ---- 150 2024-01-15 10:30 greeting.py 312 2024-01-15 10:30 greeting-0.1.0.dist-info/METADATA 92 2024-01-15 10:30 greeting-0.1.0.dist-info/WHEEL 9 2024-01-15 10:30 greeting-0.1.0.dist-info/top_level.txt 435 2024-01-15 10:30 greeting-0.1.0.dist-info/RECORD --------- ------- 998 5 files 
+```console
+$ unzip -l dist/greeting-0.1.0-py3-none-any.whl
+Archive:  dist/greeting-0.1.0-py3-none-any.whl
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      150  2024-01-15 10:30   greeting.py
+      312  2024-01-15 10:30   greeting-0.1.0.dist-info/METADATA
+       92  2024-01-15 10:30   greeting-0.1.0.dist-info/WHEEL
+        9  2024-01-15 10:30   greeting-0.1.0.dist-info/top_level.txt
+      435  2024-01-15 10:30   greeting-0.1.0.dist-info/RECORD
+---------                     -------
+      998                     5 files
 ```
 
 现在如果我们把这个 wheel 包交给别人，他们可以通过运行以下命令来安装它：
 
-```
-$  install $  Hello, Alice! 
+```console
+$ uv pip install ./greeting-0.1.0-py3-none-any.whl
+$ greet Alice
+Hello, Alice!
 ```
 
 这会把我们之前构建的库安装到他们的环境中，包括 `greet` 命令行工具。
@@ -158,8 +268,14 @@ $  install $  Hello, Alice!
 
 在 `pyproject.toml` 中，我们有不同的方式来约束依赖的兼容版本范围：
 
-```
-[project] dependencies =["requests= =2.32. 3", # Exact version - only this specific version  "click> =8.0", # Minimum version - 8.0 or newer  "numpy> =1.24,<2.0", # Range - at least 1.24 but less than 2.0  "pandas~ =2.1. 0", # Compatible release - >=2.1.0 and <2.2.0  ]
+```toml
+[project]
+dependencies = [
+    "requests==2.32.3",  # Exact version - only this specific version
+    "click>=8.0",        # Minimum version - 8.0 or newer
+    "numpy>=1.24,<2.0",  # Range - at least 1.24 but less than 2.0
+    "pandas~=2.1.0",     # Compatible release - >=2.1.0 and <2.2.0
+]
 ```
 
 版本标识符在许多包管理器（npm、cargo 等）中都存在，具体语义各有不同。`~=` 运算符是 Python 的“兼容发布”（compatible release）运算符 —— `~=2.1.0` 表示“任何与 2.1.0 兼容的版本”，即 `>=2.1.0` 且 `<2.2.0`。这大致相当于 npm 和 cargo 中的插入符（`^`）运算符，后者遵循 SemVer 的兼容性概念。
@@ -174,8 +290,23 @@ $  install $  Hello, Alice!
 
 包管理器工作的一部分是考虑依赖 —— 以及传递依赖 —— 提供的所有约束，然后产出一份能满足所有约束的有效版本清单。这份具体的版本清单随后可以保存到文件中以实现可复现性（reproducibility）；这类文件被称为 *锁文件*（lockfile）。
 
-```
-$  Resolved 12 packages in 45ms $  cat head -20version = 1 requires-python = "> = "  [[package]] name = "certifi" version = "2024.8.30" source = { registry = "https://pypi.org/simple" } sdist = { url = "https://files.pythonhosted.org/...", hash = "sha256:..." } wheels = [ { url = "https://files.pythonhosted.org/...", hash = "sha256:..." }, ] ... 
+```console
+$ uv lock
+Resolved 12 packages in 45ms
+
+$ cat uv.lock | head -20
+version = 1
+requires-python = ">=3.11"
+
+[[package]]
+name = "certifi"
+version = "2024.8.30"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/...", hash = "sha256:..." }
+wheels = [
+    { url = "https://files.pythonhosted.org/...", hash = "sha256:..." },
+]
+...
 ```
 
 处理依赖版本管理和可复现性时，一个关键区别是库与应用程序/服务之间的差异。库旨在被其他代码导入和使用，而这些代码可能有自己的依赖，因此指定过于严格的版本约束可能与用户的其他依赖产生冲突。相比之下，应用程序或服务是软件的最终消费者，通常通过用户界面或 API 而非编程接口来暴露其功能。对库而言，良好的做法是指定版本范围，以最大化与更广泛包生态系统的兼容性。对应用程序而言，锁定精确版本可确保可复现性 —— 每个运行该应用程序的人使用的都是完全相同的依赖。
@@ -198,14 +329,25 @@ $  Resolved 12 packages in 45ms $  cat head -20version = 1 requires-python = "> 
 
 运行容器很简单。例如，要在容器内运行一个 Python 解释器，我们使用 `docker run`（`-it` 标志使容器带有交互式终端。当你退出时，容器就会停止。）。
 
-```
-$  -itPython 3.12.7 (main, Nov 5 2024, 02:53:25) [GCC 12.2.0] on linux >>>("Hello from inside a container!")Hello from inside a container! 
+```console
+$ docker run -it python:3.12 python
+Python 3.12.7 (main, Nov  5 2024, 02:53:25) [GCC 12.2.0] on linux
+>>> print("Hello from inside a container!")
+Hello from inside a container!
 ```
 
 实际上你的程序可能依赖整个文件系统。为了解决这个问题，我们可以使用容器镜像（container image），它把应用程序的整个文件系统作为构建产物一起分发。容器镜像是以编程方式创建的。用 docker，我们通过 Dockerfile 语法精确指定镜像的依赖、系统库和配置：
 
-```
-FROM python:3.12 RUN RUN install -y RUN install -y RUN install RUN install COPY . /app WORKDIR /app RUN install
+```dockerfile
+FROM python:3.12
+RUN apt-get update
+RUN apt-get install -y gcc
+RUN apt-get install -y libpq-dev
+RUN pip install numpy
+RUN pip install pandas
+COPY . /app
+WORKDIR /app
+RUN pip install .
 ```
 
 一个重要的区别：Docker **镜像**（image）是打包好的构建产物（就像模板），而**容器**是该镜像的运行实例。你可以用同一个镜像运行多个容器。镜像以分层方式构建，Dockerfile 中的每条指令（`FROM`、`RUN`、`COPY` 等）都会创建一个新层。Docker 会缓存这些层，所以如果你修改了 Dockerfile 中的某一行，只需重建该层及其后续的层。
@@ -214,8 +356,18 @@ FROM python:3.12 RUN RUN install -y RUN install -y RUN install RUN install COPY 
 
 下面是改进后的版本
 
-```
-FROM python:3.12-slim COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv RUN && \ install -y --no-install-recommends && \ rm -rf* WORKDIR /app ENV PATH="/app/.venv/bin:$PATH" COPY pyproject.toml uv.lock ./ RUN sync --locked --no-dev --no-install-project COPY . . RUN sync --locked --no-dev
+```dockerfile
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH"
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+COPY . .
+RUN uv sync --locked --no-dev
 ```
 
 在上面的例子中我们看到，我们不是从源代码安装 `uv`，而是从 `ghcr.io/astral-sh/uv:latest` 镜像复制预编译好的二进制文件。这被称为 *builder* 模式。采用这种模式，我们无需分发编译代码所需的所有工具，只需分发运行应用程序所需的最终二进制文件（这里是 `uv`）。
@@ -230,14 +382,24 @@ Docker 有一些需要注意的重要局限。首先，容器镜像往往是平�
 
 下面是一个通过环境变量配置的应用示例：
 
-```
-import os DATABASE_URL = os. environ. get("DATABASE_URL","sqlite:///local.db") DEBUG = os. environ. get("DEBUG", "false"). lower() == "true" API_KEY = os. environ["API_KEY"]# Required - will raise if not set 
+```python
+import os
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///local.db")
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+API_KEY = os.environ["API_KEY"]  # Required - will raise if not set
 ```
 
 应用也可以通过配置文件来配置（例如一个通过 `yaml.load` 加载配置的 Python 程序），`config.yaml`：
 
-```
-database: url: "postgresql://localhost/myapp" pool_size: 5 server: host: "0.0.0.0" port: 8080 debug: false
+```yaml
+database:
+  url: "postgresql://localhost/myapp"
+  pool_size: 5
+server:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false
 ```
 
 思考配置问题的一条好的经验法则是：同一份代码库只需更改配置（而非代码）就应该能部署到不同的环境（开发、预发布、生产）。
@@ -252,16 +414,47 @@ database: url: "postgresql://localhost/myapp" pool_size: 5 server: host: "0.0.0.
 
 [Docker Compose](https://docs.docker.com/compose/) 是一个用于定义和运行多容器应用的工具。你不必逐个管理容器，而是在一个 YAML 文件中声明所有服务并统一编排（orchestrate）它们。现在我们的完整应用包含不止一个容器：
 
-```
-# docker-compose.yml services: web: build:. ports: - "8080:8080" environment: -REDIS_URL=redis://cache:6379 depends_on: - cache cache: image:redis:7-alpine volumes: -redis_data:/data volumes: redis_data:
+```yaml
+# docker-compose.yml
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://cache:6379
+    depends_on:
+      - cache
+
+  cache:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
 ```
 
 执行 `docker compose up`，两个服务会一起启动，Web 应用可以使用主机名 `cache` 连接 Redis（Docker 的内部 DNS 会自动解析服务名）。Docker Compose 让我们声明想如何部署一个或多个服务，并负责把它们一起启动、在其间建立网络、管理用于数据持久化的共享卷（volume）等编排工作。
 
 对于生产部署，你通常希望 docker compose 服务在开机时自动启动，并在失败时自动重启。一种常见的做法是用 systemd 管理 docker compose 部署：
 
-```
-# /etc/systemd/system/myapp.service [Unit] Description = My Application Requires =docker.service After =docker.service[Service] Type = oneshot RemainAfterExit = yes WorkingDirectory =/opt/myapp ExecStart =/usr/bin/docker compose up -d ExecStop =/usr/bin/docker compose down[Install] WantedBy =multi-user.target
+```ini
+# /etc/systemd/system/myapp.service
+[Unit]
+Description=My Application
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/myapp
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 这个 systemd 单元（unit）文件确保你的应用在系统启动时（Docker 就绪之后）启动，并提供 `systemctl start myapp`、`systemctl stop myapp`、`systemctl status myapp` 等标准控制命令。
@@ -270,8 +463,13 @@ database: url: "postgresql://localhost/myapp" pool_size: 5 server: host: "0.0.0.
 
 这种多容器设置之所以在一定程度上可行，是因为现代服务通过标准化的 API（即 HTTP REST API）相互通信。例如，每当程序与 OpenAI 或 Anthropic 这类 LLM 提供商交互时，底层都是在向它们的服务器发送 HTTP 请求并解析响应：
 
-```
-$  \ -H "x-api-key: $ " \   -H "content-type: application/json" \ -H "anthropic-version: 2023-06-01" \ -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 256, "messages": [{"role": "user", "content": "Explain containers vs VMs in one sentence."}]}' 
+```console
+$ curl https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "content-type: application/json" \
+    -H "anthropic-version: 2023-06-01" \
+    -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 256,
+         "messages": [{"role": "user", "content": "Explain containers vs VMs in one sentence."}]}'
 ```
 
 # 发布
@@ -284,34 +482,47 @@ $  \ -H "x-api-key: $ " \   -H "content-type: application/json" \ -H "anthropic-
 
 包管理器有时支持直接从 GitHub 安装，可以从源代码安装，也可以从预构建的 wheel 包安装：
 
-```
-#  source() $  install  #  $  install  #  $  install 
+```console
+# Install from source (will clone and build)
+$ pip install git+https://github.com/psf/requests.git
+
+# Install from a specific tag/branch
+$ pip install git+https://github.com/psf/requests.git@v2.32.3
+
+# Install a wheel directly from a GitHub release
+$ pip install https://github.com/user/repo/releases/download/v1.0/package-1.0-py3-none-any.whl
 ```
 
 事实上，像 Go 这样的语言采用去中心化的分发模式 —— Go 模块不是通过中心化的包仓库，而是直接从其源代码仓库分发。像 `github.com/gorilla/mux` 这样的模块路径指明了代码存放的位置，`go get` 直接从那里获取。不过，大多数包管理器（如 `pip`、`cargo` 或 `brew`）都有预打包项目的中心化索引，以便于分发和安装。如果我们运行
 
-```
-$  install --verbose --no-cache grep -F'.whl'DEBUG Selecting: requests==2.32.5 [compatible] (requests-2.32.5-py3-none-any.whl) DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl.metadata DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl 
+```console
+$ uv pip install requests --verbose --no-cache 2>&1 | grep -F '.whl'
+DEBUG Selecting: requests==2.32.5 [compatible] (requests-2.32.5-py3-none-any.whl)
+DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl.metadata
+DEBUG No cache entry for: https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl
 ```
 
 就能看到我们从哪里获取 `requests` 的 wheel 包。注意文件名中的 `py3-none-any` —— 这意味着该 wheel 包适用于任何 Python 3 版本、任何操作系统、任何架构。对于包含编译代码的包，wheel 包是平台特定的：
 
-```
-$  install --verbose --no-cache grep -F'.whl'DEBUG Selecting: numpy==2.2.1 [compatible] (numpy-2.2.1-cp312-cp312-macosx_14_0_arm64.whl) 
+```console
+$ uv pip install numpy --verbose --no-cache 2>&1 | grep -F '.whl'
+DEBUG Selecting: numpy==2.2.1 [compatible] (numpy-2.2.1-cp312-cp312-macosx_14_0_arm64.whl)
 ```
 
 这里 `cp312-cp312-macosx_14_0_arm64` 表示这个 wheel 包专门用于 macOS 14 及以上、ARM64（Apple Silicon）平台上的 CPython 3.12。如果你在其他平台上，`pip` 会下载不同的 wheel 包或从源代码构建。
 
 反过来，要让人们能够找到我们创建的包，我们需要把它发布到这些注册中心（registry）之一。在 Python 中，主要的注册中心是 [Python 包索引（PyPI）](https://pypi.org)。与安装一样，发布包也有多种方式。`uv publish` 命令提供了把包上传到 PyPI 的现代化接口：
 
-```
-$  --publish-urlPublishing greeting-0.1.0.tar.gz Publishing greeting-0.1.0-py3-none-any.whl 
+```console
+$ uv publish --publish-url https://test.pypi.org/legacy/
+Publishing greeting-0.1.0.tar.gz
+Publishing greeting-0.1.0-py3-none-any.whl
 ```
 
 这里我们使用的是 [TestPyPI](https://test.pypi.org) —— 一个独立的包注册中心，专门用于测试你的发布流程，而不会污染真正的 PyPI。上传之后，你可以从 TestPyPI 安装：
 
-```
-$  install --index-url
+```console
+$ uv pip install --index-url https://test.pypi.org/simple/ greeting
 ```
 
 发布软件时的一个关键考量是信任。用户如何验证他们下载的包确实来自你、且没有被篡改？包注册中心使用校验和（checksum）来验证完整性，一些生态系统还支持包签名（package signing），以提供作者身份的密码学证明。

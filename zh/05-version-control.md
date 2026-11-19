@@ -12,6 +12,8 @@
 
 尽管还有其他 VCS，**Git** 是事实上的（de facto）版本控制标准。这幅 [XKCD 漫画](https://xkcd.com/1597/)刻画了 Git 的名声：
 
+![xkcd 1597](https://imgs.xkcd.com/comics/git.png)
+
 由于 Git 的接口是一种存在泄漏的抽象（leaky abstraction），自顶向下地学习 Git（从它的接口/命令行界面开始）可能会带来很多困惑。人们可以死记硬背少数几条命令并把它们当作魔法咒语，然后每当出问题时就按照上面漫画中的方法来处理。
 
 虽然 Git 的接口确实丑陋，但其底层的设计和理念却是优美的。丑陋的接口只能靠*死记硬背*，而优美的设计是可以被*理解*的。正因如此，我们将自底向上地讲解 Git，先从它的数据模型开始，之后再介绍命令行界面。一旦理解了数据模型，就能更好地理解各个命令是如何操纵底层数据模型的。
@@ -25,7 +27,13 @@ Git 的巧妙之处在于它精心设计的数据模型，正是这个模型支�
 Git 将某个顶层目录下的一组文件和文件夹的历史建模为一系列快照。在 Git 的术语中，一个文件被称为“blob”，它就是一堆字节。一个目录被称为“tree”，它将名字映射到 blob 或 tree（因此目录可以包含其他目录）。快照就是被跟踪的顶层 tree。例如，我们可能有如下的一棵树：
 
 ```
- (tree) | +- foo (tree) | | | + bar.txt (blob, contents = "hello world") | +- baz.txt (blob, contents = "git is wonderful") 
+<root> (tree)
+|
++- foo (tree)
+|  |
+|  + bar.txt (blob, contents = "hello world")
+|
++- baz.txt (blob, contents = "git is wonderful")
 ```
 
 顶层 tree 包含两个元素：一个 tree “foo”（它本身包含一个元素，即 blob “bar.txt”），以及一个 blob “baz.txt”。
@@ -39,14 +47,22 @@ Git 将某个顶层目录下的一组文件和文件夹的历史建模为一系�
 Git 把这些快照称为“提交”（commit）。把提交历史可视化出来大概长这样：
 
 ```
-o <-- o <-- o <-- o ^ \ --- o <-- o 
+o <-- o <-- o <-- o
+            ^
+             \
+              --- o <-- o
 ```
 
 在上面的 ASCII 图中，每个 `o` 对应一个单独的提交（快照）。箭头指向每个提交的父提交（这是一种“在……之前”的关系，而不是“在……之后”）。在第三个提交之后，历史分叉成两条独立的分支。这可能对应于，比如两个相互独立、并行开发的特性。将来，这些分支可以被合并，创建出一个同时包含这两个特性的新快照，产生如下所示的新历史，其中新创建的合并提交以粗体显示：
 
-```
- o <-- o <-- o <-- o <---- o ^ / \ v --- o <-- o  
-```
+<pre class="highlight">
+<code>
+o <-- o <-- o <-- o <---- <strong>o</strong>
+            ^            /
+             \          v
+              --- o <-- o
+</code>
+</pre>
 
 Git 中的提交是不可变的。但这并不意味着错误无法修正；只不过对提交历史的“编辑”实际上是创建了全新的提交，并将引用（reference，见下文）更新为指向这些新提交。
 
@@ -55,7 +71,19 @@ Git 中的提交是不可变的。但这并不意味着错误无法修正；只�
 用伪代码把 Git 的数据模型写出来也许颇有启发：
 
 ```
-// a file is a bunch of bytes type blob = array // a directory contains named files and directories type tree = map // a commit has parents, metadata, and the top-level tree type commit = struct { parents: array author: string message: string snapshot: tree } 
+// a file is a bunch of bytes
+type blob = array<byte>
+
+// a directory contains named files and directories
+type tree = map<string, tree | blob>
+
+// a commit has parents, metadata, and the top-level tree
+type commit = struct {
+    parents: array<commit>
+    author: string
+    message: string
+    snapshot: tree
+}
 ```
 
 这是一个干净、简单的历史模型。
@@ -65,13 +93,20 @@ Git 中的提交是不可变的。但这并不意味着错误无法修正；只�
 一个“对象”（object）是 blob、tree 或 commit：
 
 ```
-type object = blob | tree | commit 
+type object = blob | tree | commit
 ```
 
 在 Git 的数据存储中，所有对象都通过其 [SHA-1 哈希](https://en.wikipedia.org/wiki/SHA-1)进行内容寻址（content-addressed）。
 
 ```
-objects = map def store(object): id = sha1(object) objects[id] = object def load(id): return objects[id] 
+objects = map<string, object>
+
+def store(object):
+    id = sha1(object)
+    objects[id] = object
+
+def load(id):
+    return objects[id]
 ```
 
 Blob、tree 和 commit 以这种方式被统一起来：它们全都是对象。当它们引用其他对象时，在磁盘上的表示中并不真正*包含*这些对象，而是通过哈希持有一个指向它们的引用。
@@ -79,13 +114,14 @@ Blob、tree 和 commit 以这种方式被统一起来：它们全都是对象。
 例如，[上文](#snapshots)示例目录结构对应的 tree（使用 `git cat-file -p 698281bc680d1995c5f4caaf3359721a5a58d48d` 可视化）如下所示：
 
 ```
-100644 blob 4448adbf7ecd394f42ae135bbeed9676e894af85 baz.txt 040000 tree c68d233a33c5c06e0340e4c224f0afca87c8ce87 foo 
+100644 blob 4448adbf7ecd394f42ae135bbeed9676e894af85    baz.txt
+040000 tree c68d233a33c5c06e0340e4c224f0afca87c8ce87    foo
 ```
 
 这个 tree 本身包含指向其内容的指针：`baz.txt`（一个 blob）和 `foo`（一个 tree）。如果我们用 `git cat-file -p 4448adbf7ecd394f42ae135bbeed9676e894af85` 查看 baz.txt 对应哈希所寻址的内容，会得到：
 
 ```
-git is wonderful 
+git is wonderful
 ```
 
 ## 引用
@@ -95,7 +131,19 @@ git is wonderful
 Git 解决这个问题的办法是为 SHA-1 哈希起人类可读的名字，称为“引用”（reference）。引用是指向提交的指针。与不可变的对象不同，引用是可变的（可以更新为指向新的提交）。例如，`master` 引用通常指向开发主分支上的最新提交。
 
 ```
-references = map def update_reference(name, id): references[name] = id def read_reference(name): return references[name] def load_reference(name_or_id): if name_or_id in references: return load(references[name_or_id]) else: return load(name_or_id) 
+references = map<string, string>
+
+def update_reference(name, id):
+    references[name] = id
+
+def read_reference(name):
+    return references[name]
+
+def load_reference(name_or_id):
+    if name_or_id in references:
+        return load(references[name_or_id])
+    else:
+        return load(name_or_id)
 ```
 
 有了引用，Git 就可以用像 “master” 这样人类可读的名字来指代历史中的某个特定快照，而不必使用冗长的十六进制字符串。
@@ -124,36 +172,36 @@ Git 通过一种叫做“暂存区”（staging area）的机制来适应这些�
 
 ## 基础
 
-* `git help` ：获取某个 git 命令的帮助
+* `git help <command>`：获取某个 git 命令的帮助
 * `git init`：创建一个新的 git 仓库，数据存储在 `.git` 目录中
 * `git status`：告诉你当前的状态
-* `git add` ：将文件添加到暂存区
+* `git add <filename>`：将文件添加到暂存区
 * `git commit`：创建一个新的提交
   + 写[好的提交信息](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)！
   + 还有更多理由去写[好的提交信息](https://chris.beams.io/posts/git-commit/)！
 * `git log`：显示扁平化的历史日志
 * `git log --all --graph --decorate`：以 DAG 的形式可视化历史
-* `git diff` ：显示你相对于暂存区所做的更改
-* `git diff` ：显示某个文件在快照之间的差异
-* `git checkout` ：更新 HEAD（如果检出的是一个分支，还会更新当前分支）
+* `git diff <filename>`：显示你相对于暂存区所做的更改
+* `git diff <revision> <filename>`：显示某个文件在快照之间的差异
+* `git checkout <revision>`：更新 HEAD（如果检出的是一个分支，还会更新当前分支）
 
 ## 分支与合并
 
 * `git branch`：显示分支
-* `git branch` ：创建分支
-* `git switch` ：切换到某个分支
-* `git checkout -b` ：创建分支并切换到它
-  + 等同于 `git branch ; git switch`
-* `git merge` ：合并到当前分支
+* `git branch <name>`：创建分支
+* `git switch <name>`：切换到某个分支
+* `git checkout -b <name>`：创建分支并切换到它
+  + 等同于 `git branch <name>; git switch <name>`
+* `git merge <revision>`：合并到当前分支
 * `git mergetool`：使用一个好用的工具来帮助解决合并冲突
 * `git rebase`：将一组补丁变基（rebase）到新的基底上
 
 ## 远程
 
 * `git remote`：列出远程
-* `git remote add` ：添加一个远程
-* `git push  :`：将对象发送到远程，并更新远程引用
-* `git branch --set-upstream-to=/`：在本地分支与远程分支之间建立对应关系
+* `git remote add <name> <url>`：添加一个远程
+* `git push <remote> <local branch>:<remote branch>`：将对象发送到远程，并更新远程引用
+* `git branch --set-upstream-to=<remote>/<remote branch>`：在本地分支与远程分支之间建立对应关系
 * `git fetch`：从远程获取对象/引用
 * `git pull`：等同于 `git fetch; git merge`
 * `git clone`：从远程下载仓库
@@ -161,7 +209,7 @@ Git 通过一种叫做“暂存区”（staging area）的机制来适应这些�
 ## 撤销
 
 * `git commit --amend`：编辑某个提交的内容/信息
-* `git reset` ：将某个文件移出暂存区
+* `git reset <file>`：将某个文件移出暂存区
 * `git restore`：丢弃更改
 
 # Git 进阶
